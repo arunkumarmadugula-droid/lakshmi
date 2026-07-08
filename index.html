@@ -1,1085 +1,1137 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-<title>Lakshmi</title>
-<meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Lakshmi" />
-<meta name="theme-color" content="#12130F" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#12130F">
+<title>Lakshmi — private expense intelligence</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="apple-touch-icon" href="icon-180.png" />
-<style>html,body{margin:0;padding:0;background:#12130F}</style>
-<script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
-<script crossorigin src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+<script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
 <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+<style>
+:root{
+  --ground:#12130F; --panel:#1B1C14; --panel2:#242519; --line:#32332A;
+  --ink:#F2EDDF; --dim:#9A947F; --faint:#6C6753;
+  --amber:#E2A63D; --amber2:#C98F2B; --green:#7FB069; --red:#E0653A; --teal:#6FA8A0; --violet:#A08FC0;
+  --shadow:0 10px 30px rgba(0,0,0,.35);
+}
+[data-theme="light"]{
+  --ground:#F5F2E8; --panel:#FFFFFF; --panel2:#EEEADC; --line:#DDD7C4;
+  --ink:#23211A; --dim:#7A7462; --faint:#A39D89;
+  --amber:#B07A17; --amber2:#8F6210; --green:#4E7D3A; --red:#C04A22; --teal:#3F7A72; --violet:#6D5B96;
+  --shadow:0 8px 24px rgba(60,50,20,.12);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:var(--ground);color:var(--ink);
+  font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  min-height:100%;overscroll-behavior-y:none}
+.fr{font-family:"Fraunces",Georgia,serif}
+.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+input,select,textarea,button{font-family:inherit;color:inherit}
+input,select,textarea{background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+  padding:10px 12px;font-size:15px;outline:none;width:100%}
+input:focus,select:focus,textarea:focus{border-color:var(--amber)}
+button{cursor:pointer;border:none;background:none;padding:0}
+::placeholder{color:var(--faint)}
+#app{max-width:520px;margin:0 auto;min-height:100vh;position:relative}
+.hdr{position:sticky;top:0;z-index:40;background:color-mix(in srgb,var(--ground) 88%,transparent);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+  padding:calc(env(safe-area-inset-top,0px) + 10px) 18px 10px;
+  display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line)}
+.screen{padding:16px 16px calc(96px + env(safe-area-inset-bottom,0px));animation:fadeUp .28s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes pop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:12px}
+.card.hero{background:linear-gradient(160deg,var(--panel) 0%,var(--panel2) 100%);box-shadow:var(--shadow)}
+.sec{margin-bottom:12px}
+.sec-h{display:flex;align-items:center;justify-content:space-between;padding:4px 2px;cursor:pointer;user-select:none}
+.sec-t{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:600}
+.chev{transition:transform .25s ease;color:var(--faint);font-size:12px}
+.chev.open{transform:rotate(90deg)}
+.collapse{overflow:hidden;transition:max-height .32s ease,opacity .28s ease}
+.nav{position:fixed;bottom:0;left:0;right:0;z-index:50;max-width:520px;margin:0 auto;
+  background:color-mix(in srgb,var(--panel) 92%,transparent);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border-top:1px solid var(--line);display:flex;align-items:flex-end;justify-content:space-around;
+  padding:8px 8px calc(8px + env(safe-area-inset-bottom,0px))}
+.nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;
+  color:var(--faint);padding:4px 0;transition:color .2s}
+.nav button.on{color:var(--amber)}
+.fab{width:54px;height:54px;border-radius:50%;background:var(--amber);color:#1A1508;font-size:26px;
+  display:flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(226,166,61,.4);
+  transform:translateY(-14px);transition:transform .15s}
+.fab:active{transform:translateY(-14px) scale(.92)}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:999px;
+  border:1px solid var(--line);background:var(--panel2);font-size:12.5px;color:var(--dim);transition:all .15s}
+.pill.on{background:var(--amber);color:#1A1508;border-color:var(--amber);font-weight:600}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border-radius:12px;
+  padding:12px 16px;font-size:14.5px;font-weight:600;transition:transform .12s,opacity .15s}
+.btn:active{transform:scale(.97)}
+.btn.p{background:var(--amber);color:#1A1508}
+.btn.g{background:var(--panel2);border:1px solid var(--line);color:var(--ink)}
+.btn.d{background:transparent;border:1px solid var(--red);color:var(--red)}
+.btn.full{width:100%}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.kv{font-size:12px;color:var(--dim)}
+.big{font-size:26px;font-weight:600}
+.bar{height:7px;border-radius:99px;background:var(--panel2);overflow:hidden;border:1px solid var(--line)}
+.bar>i{display:block;height:100%;border-radius:99px;background:var(--amber);transition:width .5s ease}
+.sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:80;animation:fadeUp .2s ease;
+  backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:90;max-width:520px;margin:0 auto;
+  background:var(--panel);border-radius:22px 22px 0 0;border:1px solid var(--line);border-bottom:none;
+  padding:14px 18px calc(20px + env(safe-area-inset-bottom,0px));max-height:88vh;overflow-y:auto;
+  animation:slideUp .3s cubic-bezier(.3,1.1,.4,1)}
+@keyframes slideUp{from{transform:translateY(60px);opacity:0}to{transform:none;opacity:1}}
+.handle{width:38px;height:4px;border-radius:99px;background:var(--line);margin:0 auto 12px}
+.receipt{background:#FCF8EC;color:#262215;border-radius:6px;padding:16px 14px;font-family:"IBM Plex Mono",monospace;
+  font-size:12.5px;box-shadow:var(--shadow);position:relative}
+.receipt:before,.receipt:after{content:"";position:absolute;left:0;right:0;height:8px;
+  background-image:radial-gradient(circle at 6px -2px,transparent 6px,#FCF8EC 6.5px);background-size:14px 8px}
+.receipt:before{top:-7px;transform:rotate(180deg)}
+.receipt:after{bottom:-7px}
+.tag{font-size:10.5px;padding:3px 8px;border-radius:6px;font-weight:600;letter-spacing:.02em}
+.tag.ok{background:color-mix(in srgb,var(--green) 18%,transparent);color:var(--green)}
+.tag.warn{background:color-mix(in srgb,var(--amber) 18%,transparent);color:var(--amber)}
+.tag.bad{background:color-mix(in srgb,var(--red) 18%,transparent);color:var(--red)}
+.tag.mut{background:var(--panel2);color:var(--dim)}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal .d{aspect-ratio:1;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  font-size:12.5px;color:var(--dim);position:relative;border:1px solid transparent}
+.cal .d.cur{border-color:var(--amber);color:var(--ink);font-weight:600}
+.cal .d.sel{background:var(--panel2);color:var(--ink)}
+.cal .dots{display:flex;gap:2px;position:absolute;bottom:4px}
+.cal .dot{width:4px;height:4px;border-radius:50%}
+.list-it{display:flex;align-items:center;gap:11px;padding:11px 2px;border-bottom:1px solid var(--line)}
+.list-it:last-child{border-bottom:none}
+.ico{width:34px;height:34px;border-radius:10px;background:var(--panel2);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.score-ring{position:relative;width:112px;height:112px;flex-shrink:0}
+.score-ring .n{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.hint{font-size:12px;color:var(--faint)}
+.seg{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:3px;gap:2px;margin-bottom:14px}
+.seg button{flex:1;padding:8px 4px;border-radius:9px;font-size:12.5px;color:var(--dim);font-weight:600}
+.seg button.on{background:var(--amber);color:#1A1508}
+.fade-num{animation:pop .35s ease}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
 </head>
 <body>
-<div id="root"></div>
+<div id="app"></div>
 <script type="text/babel" data-presets="react">
-/* Standalone build: React/Recharts come from CDN globals; icons are inline glyphs */
-const { useState, useEffect, useMemo } = React;
-const { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid } = Recharts;
-const mkIcon = (glyph) => ({ size = 16, color, style }) => (
-  <span style={{ fontSize: Math.round(size * 0.95), lineHeight: 1, color, display: "inline-block", ...style }}>{glyph}</span>);
-const Camera = mkIcon("📷"), LayoutDashboard = mkIcon("📊"), ReceiptText = mkIcon("🧾"),
-  Scale = mkIcon("⚖️"), Wallet = mkIcon("👛"), Fuel = mkIcon("⛽"), Trash2 = mkIcon("🗑"),
-  Plus = mkIcon("＋"), Loader2 = mkIcon("⏳"), Check = mkIcon("✓"), TrendingUp = mkIcon("▲"),
-  TrendingDown = mkIcon("▼"), Lock = mkIcon("🔒"), Settings2 = mkIcon("⚙️"), Download = mkIcon("⬇"),
-  X = mkIcon("✕"), Route = mkIcon("🛣"), Sparkles = mkIcon("✨"), MessageSquareText = mkIcon("💬"),
-  Mic = mkIcon("🎤"), Repeat = mkIcon("🔁"), ChevronDown = mkIcon("▾"), ChevronUp = mkIcon("▴");
+const { useState, useEffect, useMemo, useRef } = React;
+const RC = window.Recharts || {};
+const { ResponsiveContainer, AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Cell, PieChart, Pie, ReferenceLine } = RC;
 
-/* ── LAKSHMI · design: quiet dark ledger, generous space, amber = money ── */
-const T = {
-  bg: "#12130F", surface: "#1B1D17", surface2: "#252821", line: "#32362C",
-  paper: "#ECE8DC", dim: "#9BA294", amber: "#E2A63D", green: "#8CBB80", red: "#D97757",
-};
-const CATS = ["Groceries", "Rent", "Mortgage", "Utilities", "Dining", "Fuel",
-  "Household", "Health", "Insurance", "Subscriptions", "Shopping", "Transport",
-  "Entertainment", "Education", "India transfer", "Other"];
-const CAT_COLORS = ["#8CBB80", "#E2A63D", "#C9973B", "#7FA8C9", "#D97757", "#B5A642",
-  "#6FBFB0", "#C98BB9", "#8E9BD9", "#A8C97F", "#D9A08C", "#9BB8D9",
-  "#D9C97F", "#7FC9A8", "#E28B5B", "#8B9389"];
-const UNITS = ["ea", "kg", "g", "lb", "L", "ml"];
-const catColor = (c) => CAT_COLORS[Math.max(0, CATS.indexOf(c)) % CAT_COLORS.length];
-const fmt = (n, cur = "$") => `${cur}${(Number(n) || 0).toLocaleString("en-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString("en-IN")}`;
-const monthKey = (d) => (d || "").slice(0, 7);
-const thisMonth = () => new Date().toISOString().slice(0, 7);
-/* weight-aware unit price: returns {value, per} so 500 g and 1 kg compare fairly */
-function unitPrice(it) {
-  const q = +it.qty || 1, t = +it.lineTotal || 0;
-  switch (it.unit) {
-    case "kg": return { value: t / q, per: "kg" };
-    case "g": return { value: t / (q / 1000), per: "kg" };
-    case "lb": return { value: t / (q * 0.4536), per: "kg" };
-    case "L": return { value: t / q, per: "L" };
-    case "ml": return { value: t / (q / 1000), per: "L" };
-    default: return { value: t / q, per: "ea" };
-  }
+/* ───────── constants & helpers ───────── */
+const CATS = ["Groceries","Rent","Mortgage","Utilities","Dining","Fuel","Household","Health","Insurance","Subscriptions","Shopping","Transport","Entertainment","Education","Personal","India","Other"];
+const CAT_ICO = {Groceries:"🥬",Rent:"🏠",Mortgage:"🏦",Utilities:"💡",Dining:"🍽️",Fuel:"⛽",Household:"🧺",Health:"🩺",Insurance:"🛡️",Subscriptions:"🔁",Shopping:"🛍️",Transport:"🚌",Entertainment:"🎬",Education:"📚",Personal:"🌿",India:"🇮🇳",Other:"◇"};
+const FREQS = [["weekly","Weekly"],["biweekly","Bi-weekly"],["semimonthly","Semi-monthly"],["monthly","Monthly"],["quarterly","Quarterly"],["annual","Annual"]];
+const SRCS = [["bank","Bank account"],["card","Credit card"],["cash","Cash"],["other","Other"]];
+const fmt = (n, d=2) => (isFinite(+n)?+n:0).toLocaleString("en-CA",{style:"currency",currency:"CAD",minimumFractionDigits:d,maximumFractionDigits:d});
+const fmt0 = n => fmt(n,0);
+const pad = n => String(n).padStart(2,"0");
+const todayISO = () => { const d=new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
+const thisMonth = () => todayISO().slice(0,7);
+const ym = d => (d||"").slice(0,7);
+const dim = mk => { const [y,m]=mk.split("-").map(Number); return new Date(y,m,0).getDate(); };
+const addDays = (iso,n) => { const d=new Date(iso+"T12:00:00"); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
+const addMonths = (mk,n) => { const [y,m]=mk.split("-").map(Number); const d=new Date(y,m-1+n,1); return `${d.getFullYear()}-${pad(d.getMonth()+1)}`; };
+const monthLabel = mk => new Date(mk+"-02T12:00:00").toLocaleDateString("en-CA",{month:"long",year:"numeric"});
+const shortDate = iso => new Date(iso+"T12:00:00").toLocaleDateString("en-CA",{month:"short",day:"numeric"});
+const lastMonths = n => { let out=[],mk=thisMonth(); for(let i=n-1;i>=0;i--) out.push(addMonths(mk,-i)); return out; };
+const uid = () => crypto.randomUUID();
+const clamp = (n,a,b) => Math.max(a,Math.min(b,n));
+const haptic = ms => { try{ navigator.vibrate && navigator.vibrate(ms||8); }catch{} };
+
+/* ───────── storage: v2 with v1 migration ───────── */
+const KEY = "lakshmi-v2", OLD = ["lakshmi-v1","finledger-v2","finledger-v1"];
+const emptyData = { v:2, expenses:[], fuel:[], budgets:{}, recurring:[], cards:[], settlements:[], receivables:[], incomes:[],
+  settings:{ theme:"dark", inrRate:62, indiaMonthlyINR:0, savingsGoal:1000, cashOnHand:0, pin:"", payslip:null } };
+function migrateV1(d){
+  const s = d.settings||{};
+  const incomes = (s.incomes||[]).map(i => ({ id:i.id||uid(), name:i.name||"Salary", type:"recurring",
+    net:+i.amount||0, freq:i.freq||"biweekly", nextPay:"", overrides:{} }));
+  if (!incomes.length && +s.salary>0) incomes.push({ id:uid(), name:"Primary salary", type:"recurring",
+    net:Math.round((+s.salary)/26), freq:"biweekly", nextPay:"", overrides:{} });
+  const recurring = (d.recurring||[]).map(r => ({ id:r.id||uid(), name:r.store||r.name||"Fixed expense",
+    amount:+r.total||+r.amount||0, category:r.category||"Other", freq:"monthly", start:thisMonth()+"-01",
+    paySource:"bank", cardId:"", reminderDays:3, overrides:{} }));
+  return { ...emptyData, expenses:d.expenses||[], fuel:d.fuel||[], budgets:d.budgets||{}, recurring, incomes,
+    settings:{ ...emptyData.settings, inrRate:+s.inrRate||62, indiaMonthlyINR:+s.indiaMonthlyINR||0,
+      savingsGoal:+s.savingsGoal||1000, pin:s.pin||"" } };
 }
-
-/* ── ONTARIO 2026 TAKE-HOME (verified rates — see Budget tab note) ── */
-function ontarioTakeHome(gross, rrsp = 0) {
-  const cpp = Math.max(0, Math.min(gross, 74600) - 3500) * 0.0595;
-  const cpp2 = Math.max(0, Math.min(gross, 85000) - 74600) * 0.04;
-  const ei = Math.min(gross, 68900) * 0.0163;
-  const cppEnhDed = Math.max(0, Math.min(gross, 74600) - 3500) * 0.01 + cpp2;
-  const cppBaseCr = cpp - Math.max(0, Math.min(gross, 74600) - 3500) * 0.01;
-  const taxable = Math.max(0, gross - rrsp - cppEnhDed);
-  const bracket = (inc, br) => { let tax = 0, prev = 0;
-    for (const [cap, rate] of br) { if (inc <= prev) break; tax += (Math.min(inc, cap) - prev) * rate; prev = cap; } return tax; };
-  let bpaF = 16452;
-  if (taxable > 258482) bpaF = 14829;
-  else if (taxable > 181440) bpaF = 16452 - 1623 * (taxable - 181440) / 77042;
-  const fed = Math.max(0, bracket(taxable, [[58523, .14], [117045, .205], [181440, .26], [258482, .29], [Infinity, .33]])
-    - (bpaF + Math.min(1501, gross) + cppBaseCr + ei) * 0.14);
-  const onBasic = Math.max(0, bracket(taxable, [[53891, .0505], [107785, .0915], [150000, .1116], [220000, .1216], [Infinity, .1316]])
-    - (12989 + cppBaseCr + ei) * 0.0505);
-  const surtax = Math.max(0, onBasic - 5818) * 0.2 + Math.max(0, onBasic - 7446) * 0.36;
-  let ohp = 0; const ti = taxable;
-  if (ti > 200000) ohp = Math.min(900, 750 + (ti - 200000) * .25);
-  else if (ti > 72000) ohp = Math.min(750, 600 + (ti - 72000) * .25);
-  else if (ti > 48000) ohp = Math.min(600, 450 + (ti - 48000) * .25);
-  else if (ti > 36000) ohp = Math.min(450, 300 + (ti - 36000) * .06);
-  else if (ti > 20000) ohp = Math.min(300, (ti - 20000) * .06);
-  const on = onBasic + surtax + ohp;
-  const net = gross - rrsp - fed - on - cpp - cpp2 - ei;
-  return { fed, on, surtax, ohp, cpp: cpp + cpp2, ei, net, monthly: net / 12, biweekly: net / 26 };
+function loadData(){
+  try{ const raw=localStorage.getItem(KEY); if(raw){ const d=JSON.parse(raw);
+    return { ...emptyData, ...d, settings:{...emptyData.settings, ...d.settings} }; } }catch{}
+  for (const k of OLD){ try{ const raw=localStorage.getItem(k); if(raw) return migrateV1(JSON.parse(raw)); }catch{} }
+  return JSON.parse(JSON.stringify(emptyData));
 }
+const saveData = d => { try{ localStorage.setItem(KEY, JSON.stringify(d)); }catch(e){ console.error(e); } };
 
-/* ── STORAGE (migrates FinLedger data automatically) ── */
-const KEY = "lakshmi-v1";
-const emptyData = {
-  expenses: [], fuel: [], budgets: {}, recurring: [],
-  settings: { salary: 85000, rrsp: 0, payFreq: "biweekly", incomes: [], indiaMonthlyINR: 0, inrRate: 62, savingsGoal: 1000, pin: "" },
-};
-/* frequency → monthly-equivalent multiplier (52 weeks / 26 bi-weeks per year) */
-const FREQ = { weekly: 52 / 12, biweekly: 26 / 12, monthly: 1, yearly: 1 / 12 };
-const FREQ_LABEL = { weekly: "weekly", biweekly: "bi-weekly", monthly: "monthly", yearly: "yearly" };
-const incomesMonthly = (settings) => (settings.incomes || []).reduce((a, s) => a + (+s.amount || 0) * (FREQ[s.freq] || 1), 0);
-async function loadData() {
-  for (const k of [KEY, "finledger-v2", "finledger-v1"]) {
-    try {
-      const raw = localStorage.getItem(k);
-      if (raw) {
-        const d = JSON.parse(raw);
-        const settings = { ...emptyData.settings, ...d.settings };
-        if (!settings.incomes) settings.incomes = [];
-        if (+settings.familyIncome > 0 && !settings.incomes.length)
-          settings.incomes = [{ id: crypto.randomUUID(), name: "Family income", amount: +settings.familyIncome, freq: "monthly" }];
-        delete settings.familyIncome;
-        return { ...emptyData, ...d, settings };
-      }
-    } catch {}
-  }
-  return emptyData;
+/* ───────── AI: your key, on this device only. Two call sites, capped & metered ───────── */
+const AI_KEY = "lakshmi-ai", USE_KEY = "lakshmi-ai-usage";
+const getAI = () => { try{ return JSON.parse(localStorage.getItem(AI_KEY))||{}; }catch{ return {}; } };
+const setAI = c => localStorage.setItem(AI_KEY, JSON.stringify(c));
+const PRICE = { openai:{i:0.15,o:0.60}, anthropic:{i:1.0,o:5.0} }; // $/M tokens (approx; check provider pages)
+function meter(provider, inTok, outTok){
+  try{ const u=JSON.parse(localStorage.getItem(USE_KEY)||"{}"); const mk=thisMonth();
+    const m=u[mk]||{calls:0,cost:0}; const p=PRICE[provider]||PRICE.openai;
+    m.calls++; m.cost += (inTok*p.i + outTok*p.o)/1e6; u[mk]=m;
+    localStorage.setItem(USE_KEY, JSON.stringify(u)); }catch{}
 }
-async function saveData(d) { try { localStorage.setItem(KEY, JSON.stringify(d)); } catch (e) { console.error(e); } }
-
-/* post any recurring expenses not yet logged this month */
-function applyRecurring(data) {
-  const mk = thisMonth();
-  let changed = false;
-  const expenses = [...data.expenses];
-  const recurring = data.recurring.map(r => {
-    if (r.lastPosted === mk) return r;
-    expenses.unshift({ id: crypto.randomUUID(), store: r.store, date: `${mk}-01`, category: r.category,
-      total: r.total, tax: 0, subtotal: r.total, items: [], source: "recurring" });
-    changed = true;
-    return { ...r, lastPosted: mk };
-  });
-  return changed ? { ...data, expenses, recurring } : data;
+const usage = () => { try{ return (JSON.parse(localStorage.getItem(USE_KEY)||"{}")[thisMonth()])||{calls:0,cost:0}; }catch{ return {calls:0,cost:0}; } };
+/* downscale images before sending — the single biggest AI cost saver */
+function shrink(dataUrl, maxSide=1024, q=0.72){
+  return new Promise(res => { const img=new Image();
+    img.onload=()=>{ const r=Math.min(1, maxSide/Math.max(img.width,img.height));
+      const c=document.createElement("canvas"); c.width=Math.round(img.width*r); c.height=Math.round(img.height*r);
+      c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+      res(c.toDataURL("image/jpeg",q)); };
+    img.onerror=()=>res(dataUrl); img.src=dataUrl; });
 }
-
-/* ── AI (text + vision via in-app API) ── */
-const IMPORT_SCHEMA = `{"store":"","date":"YYYY-MM-DD","category":"<one of: ${CATS.join(", ")}>","subtotal":0,"tax":0,"total":0,"litres":0,"items":[{"name":"","qty":1,"unit":"ea|kg|g|lb|L|ml","lineTotal":0}]}`;
-/* ── AI: your own key, your choice of brain (OpenAI = ChatGPT's engine, or Claude) ── */
-const AI_KEY = "lakshmi-ai";
-const getAI = () => { try { return JSON.parse(localStorage.getItem(AI_KEY)) || {}; } catch { return {}; } };
-const setAI = (cfg) => localStorage.setItem(AI_KEY, JSON.stringify(cfg));
-async function askAI(content, maxTokens = 1000) {
-  const { provider = "openai", key = "" } = getAI();
-  if (!key) throw new Error("Add your AI key first: tap the gear icon → AI for bill reading");
-  if (provider === "openai") {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model: "gpt-4o-mini", max_tokens: maxTokens,
-        messages: [{ role: "user", content: content.map(b => b.type === "image"
-          ? { type: "image_url", image_url: { url: `data:${b.source.media_type};base64,${b.source.data}` } }
-          : { type: "text", text: b.text }) }],
-      }),
-    });
+async function askAI(content, maxTokens=700){
+  const { provider="openai", key="" } = getAI();
+  if(!key) throw new Error("Add your AI key first: gear icon → AI settings");
+  const est = c => Math.ceil(c.reduce((a,b)=> a + (b.type==="image"?1100:(b.text||"").length/4), 0));
+  let out="";
+  if (provider==="openai"){
+    const res = await fetch("https://api.openai.com/v1/chat/completions",{ method:"POST",
+      headers:{ "Content-Type":"application/json", Authorization:`Bearer ${key}` },
+      body:JSON.stringify({ model:"gpt-4o-mini", max_tokens:maxTokens,
+        messages:[{ role:"user", content:content.map(b => b.type==="image"
+          ? { type:"image_url", image_url:{ url:`data:${b.media};base64,${b.data}` } }
+          : { type:"text", text:b.text }) }] }) });
     const d = await res.json();
-    if (d.error) throw new Error(d.error.message || "OpenAI error");
-    return d.choices?.[0]?.message?.content || "";
+    if (d.error) throw new Error(d.error.message||"OpenAI error");
+    out = d.choices?.[0]?.message?.content||"";
+  } else {
+    const res = await fetch("https://api.anthropic.com/v1/messages",{ method:"POST",
+      headers:{ "Content-Type":"application/json", "x-api-key":key,
+        "anthropic-version":"2023-06-01", "anthropic-dangerous-direct-browser-access":"true" },
+      body:JSON.stringify({ model:"claude-haiku-4-5", max_tokens:maxTokens,
+        messages:[{ role:"user", content:content.map(b => b.type==="image"
+          ? { type:"image", source:{ type:"base64", media_type:b.media, data:b.data } }
+          : { type:"text", text:b.text }) }] }) });
+    const d = await res.json();
+    if (d.error) throw new Error(d.error.message||"AI error");
+    out = (d.content||[]).map(x=>x.text||"").join("");
   }
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-api-key": key,
-      "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-    body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: maxTokens,
-      messages: [{ role: "user", content }] }),
+  meter(provider, est(content), Math.ceil(out.length/4));
+  return out;
+}
+const parseJSON = t => { const m=t.match(/\{[\s\S]*\}|\[[\s\S]*\]/); return JSON.parse(m?m[0]:t); };
+
+/* prompts: compact by design (input tokens cost money too) */
+const SCAN_PROMPT = `Read this receipt. Reply ONLY minified JSON:
+{"kind":"fuel"|"expense","store":"","date":"YYYY-MM-DD","category":"<one of: ${CATS.join("|")}>","subtotal":0,"tax":0,"total":0,"litres":0,"fuelType":"","items":[{"name":"","qty":1,"lineTotal":0}]}
+kind=fuel only for gas-station fuel. Max 12 items; merge tiny ones. If unsure of date use "".`;
+const PAYSLIP_PROMPT = `Read this payslip. Reply ONLY minified JSON:
+{"gross":0,"fedTax":0,"provTax":0,"cpp":0,"ei":0,"pension":0,"otherDeductions":0,"net":0,"payFreq":"weekly|biweekly|semimonthly|monthly","employer":""}
+Amounts are for this single pay period. Combine taxes if not split.`;
+
+/* ───────── local analytics engine (zero AI tokens) ───────── */
+const isSettled = e => e.kind === "settlement";
+const monthExp = (data, mk) => data.expenses.filter(e => ym(e.date)===mk && !isSettled(e));
+const catSpend = (data, mk) => { const o={}; monthExp(data,mk).forEach(e => { o[e.category]=(o[e.category]||0)+(+e.total||0); }); return o; };
+const totSpend = (data, mk) => monthExp(data,mk).reduce((a,e)=>a+(+e.total||0),0);
+
+/* recurring occurrences in a month (fixed bills, subscriptions, rent, EMI…) */
+function occurrences(rec, mk){
+  const out=[], start=rec.start||mk+"-01", sd=new Date(start+"T12:00:00");
+  const push = iso => { if (ym(iso)===mk) out.push(iso); };
+  if (rec.freq==="monthly"){ push(`${mk}-${pad(Math.min(sd.getDate(), dim(mk)))}`); }
+  else if (rec.freq==="semimonthly"){ push(`${mk}-01`); push(`${mk}-15`); }
+  else if (rec.freq==="quarterly" || rec.freq==="annual"){
+    const step = rec.freq==="quarterly"?3:12;
+    const diff = (parseInt(mk)*12+parseInt(mk.slice(5))) - (sd.getFullYear()*12+sd.getMonth()+1);
+    if (diff>=0 && diff%step===0) push(`${mk}-${pad(Math.min(sd.getDate(), dim(mk)))}`);
+  } else { /* weekly / biweekly */
+    const step = rec.freq==="weekly"?7:14, first=new Date(mk+"-01T12:00:00");
+    let d=new Date(sd); const ms=step*864e5;
+    if (d<first) d=new Date(d.getTime()+Math.ceil((first-d)/ms)*ms);
+    while (ym(d.toISOString().slice(0,10))===mk){ push(d.toISOString().slice(0,10)); d=new Date(d.getTime()+ms); }
+  }
+  return out;
+}
+const recAmount = (rec, mk) => { const o=rec.overrides?.[mk]; return o&&o.amount!=null ? +o.amount : +rec.amount||0; };
+const recStatus = (rec, mk, iso) => {
+  const o=rec.overrides?.[mk]||{}; if (o.status) return o.status;
+  return iso < todayISO() ? "missed" : "upcoming";
+};
+/* every dated obligation in a month: recurring + card due dates */
+function monthItems(data, mk){
+  const items=[];
+  data.recurring.forEach(r => occurrences(r,mk).forEach(iso => {
+    const o=r.overrides?.[mk]||{};
+    items.push({ type:"rec", id:r.id, name:r.name, category:r.category, ico:CAT_ICO[r.category]||"◇",
+      date:o.snooze||iso, amount:recAmount(r,mk), status:recStatus(r,mk,o.snooze||iso),
+      paySource:r.paySource, cardId:r.cardId, reminderDays:r.reminderDays??3 });
+  }));
+  data.cards.forEach(c => {
+    const iso=`${mk}-${pad(Math.min(+c.dueDay||21, dim(mk)))}`;
+    const bill=(c.bills||{})[mk]; const st=(c.paidMonths||{})[mk]?"paid":(iso<todayISO()?"missed":"upcoming");
+    items.push({ type:"card", id:c.id, name:`${c.name} bill`, category:"Card payment", ico:"💳",
+      date:iso, amount:bill!=null?+bill:+c.currentBill||0, minPay:+c.minPayment||0, status:st, reminderDays:c.reminderDays??3 });
   });
-  const d = await res.json();
-  if (d.error) throw new Error(d.error.message || "Anthropic error");
-  return (d.content || []).filter(b => b.type === "text").map(b => b.text).join("\n");
+  const ind=(+data.settings.indiaMonthlyINR||0)/(+data.settings.inrRate||1);
+  if (ind>0) items.push({ type:"india", id:"india", name:"India transfer", category:"India", ico:"🇮🇳",
+    date:`${mk}-05`, amount:ind, status:"upcoming", reminderDays:3 });
+  return items.sort((a,b)=>a.date<b.date?-1:1);
 }
-async function analyzeBill(base64) {
-  const text = await askAI([
-    { type: "image", source: { type: "base64", media_type: "image/jpeg", data: base64 } },
-    { type: "text", text: `Read this receipt. Respond ONLY with raw JSON, no fences:\n${IMPORT_SCHEMA}\nRules: ISO date (today if unreadable); tax = HST/GST/PST summed; category = best fit; fuel receipts → category "Fuel" with litres; grocery items with weights → use unit kg/g/lb and qty as the weight number; plain numbers.` },
-  ]);
-  return JSON.parse(text.replace(/```json|```/g, "").trim());
+/* income events in a month, honouring per-event overrides (delayed / skipped / edited) */
+function incomeEvents(data, mk){
+  const out=[];
+  data.incomes.forEach(s => {
+    if (s.type==="one"){ if (ym(s.date)===mk) out.push({ id:s.id, k:s.id+s.date, name:s.name, date:s.date, amount:+s.net||0, one:true }); return; }
+    if (!s.nextPay) return;
+    const step = s.freq==="weekly"?7 : s.freq==="biweekly"?14 : 0;
+    let dates=[];
+    if (step){ let d=s.nextPay;
+      while (ym(d)>mk) d=addDays(d,-step);
+      while (ym(d)<mk) d=addDays(d,step);
+      while (ym(d)===mk){ dates.push(d); d=addDays(d,step); } }
+    else if (s.freq==="semimonthly") dates=[`${mk}-15`,`${mk}-${dim(mk)===31?"31":pad(dim(mk))}`];
+    else dates=[`${mk}-${pad(Math.min(new Date((s.nextPay||mk+"-28")+"T12:00:00").getDate(), dim(mk)))}`];
+    dates.forEach(d => { const o=(s.overrides||{})[d]||{};
+      if (o.skip) return;
+      out.push({ id:s.id, k:s.id+d, name:s.name, date:o.moveTo||d, amount:o.amount!=null?+o.amount:+s.net||0 }); });
+  });
+  return out.sort((a,b)=>a.date<b.date?-1:1);
 }
-async function fileToJpegBase64(file, maxDim = 1600) {
-  const url = URL.createObjectURL(file);
-  try {
-    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error("decode")); i.src = url; });
-    const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-    const c = document.createElement("canvas");
-    c.width = Math.round(img.width * scale); c.height = Math.round(img.height * scale);
-    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-    return c.toDataURL("image/jpeg", 0.85).split(",")[1];
-  } finally { URL.revokeObjectURL(url); }
+const monthIncome = (data, mk) => incomeEvents(data,mk).reduce((a,e)=>a+e.amount,0);
+/* signature: projected cash ribbon through the month */
+function projection(data, mk){
+  const days=dim(mk), today=todayISO(), start=+data.settings.cashOnHand||0;
+  const inflow={}, outflow={};
+  incomeEvents(data,mk).forEach(e => inflow[e.date]=(inflow[e.date]||0)+e.amount);
+  monthItems(data,mk).forEach(it => { if(it.status!=="skipped"&&it.status!=="paid") outflow[it.date]=(outflow[it.date]||0)+it.amount; });
+  /* daily variable-spend pace from budgets not yet spent */
+  const spent=catSpend(data,mk); const fixedCats=new Set(data.recurring.map(r=>r.category));
+  let varBudget=0; Object.entries(data.budgets).forEach(([c,b])=>{ if(!fixedCats.has(c)&&c!=="Rent") varBudget+=Math.max(0,(+b||0)-(spent[c]||0)); });
+  const dayN=Math.min(+today.slice(8,10), days), leftDays=Math.max(1,days-dayN);
+  const pace=varBudget/leftDays;
+  let bal=start, pts=[];
+  for(let d=1; d<=days; d++){
+    const iso=`${mk}-${pad(d)}`;
+    bal += (inflow[iso]||0) - (outflow[iso]||0);
+    if (iso>today) bal -= pace;
+    pts.push({ d, iso, bal:Math.round(bal), future:iso>today });
+  }
+  return pts;
+}
+/* budget forecast per category */
+function budgetView(data, mk){
+  const spent=catSpend(data,mk), days=dim(mk);
+  const dayN = mk===thisMonth() ? Math.max(1,+todayISO().slice(8,10)) : days;
+  return Object.entries(data.budgets).filter(([,b])=>+b>0).map(([cat,b])=>{
+    const a=spent[cat]||0, fc = mk===thisMonth() && dayN>=3 ? (a/dayN)*days : a;
+    return { cat, budget:+b, actual:a, remaining:+b-a, forecast:Math.round(fc),
+      state: a>+b?"bad" : fc>+b*1.02?"warn" : "ok" };
+  }).sort((x,y)=>y.actual-x.actual);
+}
+/* fuel analytics — full-tank method */
+function fuelStats(data){
+  const f=[...data.fuel].sort((a,b)=>a.date<b.date?-1:1);
+  const legs=[]; let lastFull=null;
+  f.forEach(x=>{ if(!x.fullTank||!+x.odometer) return;
+    if(lastFull&&+x.odometer>+lastFull.odometer){
+      const km=+x.odometer-+lastFull.odometer, L=+x.litres||0;
+      if(km>0&&L>0) legs.push({date:x.date, km, L, per:100*L/km}); }
+    lastFull=x; });
+  const byM={}; f.forEach(x=>{ const mk=ym(x.date); byM[mk]=byM[mk]||{cost:0,L:0,fills:0}; byM[mk].cost+=+x.cost||0; byM[mk].L+=+x.litres||0; byM[mk].fills++; });
+  const kmByM={}; legs.forEach(l=>{ kmByM[ym(l.date)]=(kmByM[ym(l.date)]||0)+l.km; });
+  const mileByM={}; legs.forEach(l=>{ const mk=ym(l.date); (mileByM[mk]=mileByM[mk]||[]).push(l.per); });
+  const mAvg={}; Object.entries(mileByM).forEach(([mk,a])=>mAvg[mk]=a.reduce((x,y)=>x+y,0)/a.length);
+  const ms=Object.entries(mAvg); let best=null,worst=null;
+  ms.forEach(([mk,v])=>{ if(!best||v<best[1])best=[mk,v]; if(!worst||v>worst[1])worst=[mk,v]; });
+  const vend={}; f.forEach(x=>{ const v=x.vendor||"Unknown"; vend[v]=vend[v]||{n:0,cost:0}; vend[v].n++; vend[v].cost+=+x.cost||0; });
+  const totL=f.reduce((a,x)=>a+(+x.litres||0),0), totC=f.reduce((a,x)=>a+(+x.cost||0),0);
+  return { legs, byM, kmByM, mAvg, best, worst, vend,
+    avgFill: f.length?totC/f.length:0, avgL: totL?totC/totL:0 };
+}
+/* receivables */
+const recvOut = r => Math.max(0, (+r.amount||0) - (r.repaid||[]).reduce((a,x)=>a+(+x.amount||0),0));
+/* health score + proactive alerts */
+function health(data, mk){
+  const bv=budgetView(data,mk), inc=monthIncome(data,mk), sp=totSpend(data,mk);
+  const over=bv.filter(b=>b.state==="bad").length, warn=bv.filter(b=>b.state==="warn").length;
+  const sBudget = bv.length ? clamp(1-(over+0.5*warn)/bv.length,0,1) : 0.7;
+  const sSave = inc>0 ? clamp((inc-sp)/inc/0.3,0,1) : 0.4;
+  const pts=projection(data,mk); const minBal=Math.min(...pts.map(p=>p.bal));
+  const sCash = minBal>=0 ? 1 : clamp(1+minBal/(inc||2000),0,1);
+  const hist=lastMonths(4).slice(0,3).map(m=>totSpend(data,m)).filter(x=>x>0);
+  const avg3=hist.length?hist.reduce((a,b)=>a+b,0)/hist.length:0;
+  const sMom = avg3>0 ? clamp(1.5-sp/avg3,0,1) : 0.7;
+  return Math.round(100*(0.35*sBudget+0.25*sSave+0.25*sCash+0.15*sMom));
+}
+function alerts(data, mk){
+  const out=[], today=todayISO();
+  monthItems(data,mk).forEach(it=>{
+    if(it.status==="paid"||it.status==="skipped") return;
+    const dd=Math.round((new Date(it.date)-new Date(today))/864e5);
+    if(it.status==="missed") out.push({t:"bad", m:`${it.name} (${fmt0(it.amount)}) was due ${shortDate(it.date)} — mark paid or skip`});
+    else if(dd<0) out.push({t:"warn", m:`${it.name} was due ${shortDate(it.date)} — ${fmt0(it.amount)}`});
+    else if(dd<=(it.reminderDays??3)) out.push({t:"warn", m:`${it.name} due ${dd===0?"today":dd===1?"tomorrow":"in "+dd+" days"} — ${fmt0(it.amount)}`});
+  });
+  budgetView(data,mk).forEach(b=>{
+    if(b.state==="bad") out.push({t:"bad", m:`${b.cat} over budget by ${fmt0(b.actual-b.budget)}`});
+    else if(b.state==="warn") out.push({t:"warn", m:`${b.cat} projected to exceed budget by ${fmt0(b.forecast-b.budget)}`});
+  });
+  const pts=projection(data,mk), neg=pts.find(p=>p.future&&p.bal<0);
+  if(neg) out.push({t:"bad", m:`Projected cash dips below zero around ${shortDate(neg.iso)} — review upcoming payments`});
+  const owed=data.receivables.reduce((a,r)=>a+recvOut(r),0);
+  if(owed>0) out.push({t:"warn", m:`Friends owe you ${fmt0(owed)}`});
+  data.cards.forEach(c=>{ const prev=(c.bills||{})[addMonths(mk,-1)], cur=(c.bills||{})[mk]??+c.currentBill;
+    if(prev>0&&cur>prev*1.25) out.push({t:"warn", m:`${c.name} bill up ${Math.round(100*(cur-prev)/prev)}% vs last month`}); });
+  return out.slice(0,8);
 }
 
-/* ── UI ATOMS (quieter: fewer borders, more air) ── */
-const Card = ({ children, style }) => (
-  <div style={{ background: T.surface, borderRadius: 16, padding: 18, ...style }}>{children}</div>);
-const Label = ({ children }) => (
-  <div style={{ fontSize: 11, letterSpacing: ".14em", textTransform: "uppercase", color: T.dim, marginBottom: 8 }}>{children}</div>);
-const Num = ({ children, color = T.paper, size = 26 }) => (
-  <div style={{ fontFamily: "ui-monospace,'SF Mono',Menlo,monospace", fontSize: size, fontWeight: 600, color, letterSpacing: "-0.02em" }}>{children}</div>);
-const Input = (p) => (
-  <input {...p} style={{ background: T.surface2, border: "1px solid transparent", color: T.paper, borderRadius: 10, padding: "11px 12px", fontSize: 15, width: "100%", boxSizing: "border-box", outline: "none", ...p.style }} />);
-const Select = (p) => (
-  <select {...p} style={{ background: T.surface2, border: "1px solid transparent", color: T.paper, borderRadius: 10, padding: "11px 12px", fontSize: 15, width: "100%", ...p.style }} />);
-const Btn = ({ children, onClick, tone = "amber", disabled, style }) => (
-  <button onClick={onClick} disabled={disabled} style={{
-    background: disabled ? T.surface2 : tone === "amber" ? T.amber : tone === "ghost" ? "transparent" : T.surface2,
-    color: disabled ? T.dim : tone === "amber" ? "#1A1408" : T.paper,
-    border: tone === "ghost" ? `1px solid ${T.line}` : "none", borderRadius: 12, padding: "12px 16px",
-    fontSize: 15, fontWeight: 600, cursor: disabled ? "default" : "pointer",
-    display: "inline-flex", alignItems: "center", gap: 8, justifyContent: "center", ...style }}>{children}</button>);
-const Field = ({ label, children }) => (
-  <div><div style={{ fontSize: 12, color: T.dim, marginBottom: 5 }}>{label}</div>{children}</div>);
-const tipStyle = { background: T.surface2, border: `1px solid ${T.line}`, borderRadius: 10, color: T.paper, fontSize: 12 };
-
-/* ── RECEIPT REVIEW (kept — the signature moment) ── */
-function ReceiptCard({ draft, setDraft, onSave, onDiscard }) {
-  const upd = (k, v) => setDraft({ ...draft, [k]: v });
-  const updItem = (i, k, v) => setDraft({ ...draft, items: draft.items.map((it, j) => j === i ? { ...it, [k]: v } : it) });
-  const isFuel = draft.category === "Fuel";
-  const pin = { background: "transparent", border: "none", borderBottom: "1px dotted #C9C0AA", fontFamily: "inherit", fontSize: 13, outline: "none", color: "inherit" };
-  const zig = `linear-gradient(-45deg, transparent 70%, ${T.bg} 0) 0 0/14px 14px repeat-x, linear-gradient(45deg, transparent 70%, ${T.bg} 0) 0 0/14px 14px repeat-x`;
-  return (
-    <div style={{ background: "#F4EFE2", color: "#26221A", borderRadius: "6px 6px 0 0", fontFamily: "ui-monospace,Menlo,monospace", boxShadow: "0 16px 40px rgba(0,0,0,.5)" }}>
-      <div style={{ padding: "18px 16px 8px", textAlign: "center", borderBottom: "1px dashed #A79F8C" }}>
-        <input value={draft.store} onChange={e => upd("store", e.target.value)}
-          style={{ background: "transparent", border: "none", textAlign: "center", fontFamily: "inherit", fontSize: 17, fontWeight: 700, width: "100%", outline: "none", color: "inherit" }} />
-        <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 6, flexWrap: "wrap" }}>
-          <input type="date" value={draft.date} onChange={e => upd("date", e.target.value)}
-            style={{ background: "transparent", border: "1px dashed #A79F8C", borderRadius: 4, fontFamily: "inherit", fontSize: 12, padding: "2px 6px", color: "inherit" }} />
-          <select value={draft.category} onChange={e => upd("category", e.target.value)}
-            style={{ background: "transparent", border: "1px dashed #A79F8C", borderRadius: 4, fontFamily: "inherit", fontSize: 12, color: "inherit" }}>
-            {CATS.map(c => <option key={c}>{c}</option>)}
-          </select>
-        </div>
-      </div>
-      <div style={{ padding: "10px 16px" }}>
-        {draft.items.map((it, i) => (
-          <div key={i} style={{ display: "flex", gap: 5, alignItems: "center", padding: "4px 0", fontSize: 13 }}>
-            <input value={it.name} onChange={e => updItem(i, "name", e.target.value)} style={{ ...pin, flex: 1, minWidth: 0 }} />
-            <input value={it.qty} onChange={e => updItem(i, "qty", e.target.value)} inputMode="decimal" style={{ ...pin, width: 34, textAlign: "right" }} />
-            <select value={it.unit || "ea"} onChange={e => updItem(i, "unit", e.target.value)}
-              style={{ background: "transparent", border: "none", fontFamily: "inherit", fontSize: 11, color: "#7A7260" }}>
-              {UNITS.map(u => <option key={u}>{u}</option>)}
-            </select>
-            <input value={it.lineTotal} onChange={e => updItem(i, "lineTotal", e.target.value)} inputMode="decimal" style={{ ...pin, width: 56, textAlign: "right" }} />
-            <button onClick={() => setDraft({ ...draft, items: draft.items.filter((_, j) => j !== i) })}
-              style={{ background: "none", border: "none", cursor: "pointer", color: "#A05A48", padding: 2 }}><Trash2 size={14} /></button>
-          </div>))}
-        <button onClick={() => setDraft({ ...draft, items: [...draft.items, { name: "", qty: 1, unit: "ea", lineTotal: 0 }] })}
-          style={{ background: "none", border: "1px dashed #A79F8C", borderRadius: 4, fontFamily: "inherit", fontSize: 12, padding: "4px 10px", marginTop: 6, cursor: "pointer", color: "inherit" }}>+ item</button>
-        {isFuel && (
-          <div style={{ borderTop: "1px dashed #A79F8C", marginTop: 10, paddingTop: 8, fontSize: 13 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
-              <span>LITRES</span>
-              <input value={draft.litres} onChange={e => upd("litres", e.target.value)} inputMode="decimal" style={{ ...pin, width: 80, textAlign: "right" }} />
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", padding: "2px 0" }}>
-              <span>ODOMETER (km)</span>
-              <input value={draft.odometer} onChange={e => upd("odometer", e.target.value)} inputMode="numeric" placeholder="enter now" style={{ ...pin, width: 100, textAlign: "right" }} />
-            </div>
-          </div>)}
-        <div style={{ borderTop: "1px dashed #A79F8C", marginTop: 10, paddingTop: 8, fontSize: 13 }}>
-          {["subtotal", "tax", "total"].map(k => (
-            <div key={k} style={{ display: "flex", justifyContent: "space-between", padding: "2px 0", fontWeight: k === "total" ? 700 : 400 }}>
-              <span style={{ textTransform: "uppercase", letterSpacing: ".08em" }}>{k}</span>
-              <input value={draft[k]} onChange={e => upd(k, e.target.value)} inputMode="decimal"
-                style={{ ...pin, width: 80, textAlign: "right", fontWeight: "inherit" }} />
-            </div>))}
-        </div>
-      </div>
-      <div style={{ display: "flex", gap: 10, padding: "6px 16px 22px" }}>
-        <Btn onClick={onSave} style={{ flex: 1 }}><Check size={16} /> Save to ledger</Btn>
-        <Btn onClick={onDiscard} tone="ghost">Discard</Btn>
-      </div>
-      <div style={{ height: 14, background: zig }} />
+/* ───────── shared UI atoms ───────── */
+function Sec({ title, right, open0=true, children }){
+  const [open,setOpen]=useState(open0);
+  return <div className="sec card">
+    <div className="sec-h" onClick={()=>{setOpen(!open);haptic();}}>
+      <span className="sec-t">{title}</span>
+      <span className="row" style={{gap:8}}>{right}<span className={"chev"+(open?" open":"")}>▶</span></span>
     </div>
-  );
+    <div className="collapse" style={{maxHeight:open?2000:0, opacity:open?1:0}}>
+      <div style={{paddingTop:8}}>{children}</div>
+    </div>
+  </div>;
+}
+function Sheet({ onClose, children }){
+  return <>
+    <div className="sheet-bg" onClick={onClose}/>
+    <div className="sheet"><div className="handle"/>{children}</div>
+  </>;
+}
+const Lbl = ({children}) => <div className="kv" style={{margin:"10px 0 5px"}}>{children}</div>;
+function Pills({ opts, val, onPick }){
+  return <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+    {opts.map(([v,l]) => <button key={v} className={"pill"+(val===v?" on":"")} onClick={()=>{onPick(v);haptic();}}>{l}</button>)}
+  </div>;
+}
+function Ring({ score }){
+  const R=48, C=2*Math.PI*R, off=C*(1-clamp(score,0,100)/100);
+  const col = score>=70?"var(--green)":score>=45?"var(--amber)":"var(--red)";
+  return <div className="score-ring">
+    <svg width="112" height="112" viewBox="0 0 112 112">
+      <circle cx="56" cy="56" r={R} fill="none" stroke="var(--panel2)" strokeWidth="9"/>
+      <circle cx="56" cy="56" r={R} fill="none" stroke={col} strokeWidth="9" strokeLinecap="round"
+        strokeDasharray={C} strokeDashoffset={off} transform="rotate(-90 56 56)"
+        style={{transition:"stroke-dashoffset .8s ease"}}/>
+    </svg>
+    <div className="n"><span className="fr big fade-num">{score}</span><span className="hint">health</span></div>
+  </div>;
+}
+const tipStyle = { background:"var(--panel)", border:"1px solid var(--line)", borderRadius:10, fontSize:12, color:"var(--ink)" };
+function MiniArea({ pts, y="bal", color="var(--amber)", h=120, refZero }){
+  return <div style={{height:h,margin:"6px -8px 0"}}>
+    <ResponsiveContainer width="100%" height="100%">
+      <AreaChart data={pts} margin={{top:4,right:8,left:8,bottom:0}}>
+        <defs><linearGradient id={"g"+y} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity={0.35}/><stop offset="100%" stopColor={color} stopOpacity={0}/>
+        </linearGradient></defs>
+        <XAxis dataKey="d" hide/><YAxis hide domain={["auto","auto"]}/>
+        {refZero && <ReferenceLine y={0} stroke="var(--red)" strokeDasharray="4 3"/>}
+        <Tooltip contentStyle={tipStyle} formatter={v=>fmt0(v)} labelFormatter={d=>"Day "+d}/>
+        <Area dataKey={y} stroke={color} strokeWidth={2} fill={"url(#g"+y+")"} dot={false}/>
+      </AreaChart>
+    </ResponsiveContainer>
+  </div>;
+}
+function Bars({ data, keys, colors, h=140 }){
+  return <div style={{height:h,margin:"6px -8px 0"}}>
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} margin={{top:4,right:8,left:8,bottom:0}}>
+        <XAxis dataKey="m" tick={{fontSize:10,fill:"var(--faint)"}} axisLine={false} tickLine={false}/>
+        <YAxis hide/><Tooltip contentStyle={tipStyle} formatter={v=>fmt0(v)}/>
+        {keys.map((k,i)=><Bar key={k} dataKey={k} fill={colors[i]} radius={[4,4,0,0]} maxBarSize={16}/>)}
+      </BarChart>
+    </ResponsiveContainer>
+  </div>;
 }
 
-/* ── ADD TAB (scan / paste / manual / recurring / Siri guide) ── */
-function AddTab({ data, persist }) {
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  const [draft, setDraft] = useState(null);
-  const [importText, setImportText] = useState("");
-  const [importErr, setImportErr] = useState("");
-  const [showManual, setShowManual] = useState(false);
-  const [showSiri, setShowSiri] = useState(false);
+/* ───────── HOME: scrollable intelligence dashboard ───────── */
+function Home({ data, persist, mk, openSettings }){
+  const score = health(data,mk);
+  const pts = projection(data,mk);
+  const inc = monthIncome(data,mk), sp = totSpend(data,mk);
+  const bv = budgetView(data,mk);
+  const spent = catSpend(data,mk);
+  const topCats = Object.entries(spent).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const items = monthItems(data,mk).filter(i=>i.status!=="paid"&&i.status!=="skipped");
+  const next7 = items.filter(i=>i.date>=todayISO()&&i.date<=addDays(todayISO(),7));
+  const next30 = items.filter(i=>i.date>=todayISO()&&i.date<=addDays(todayISO(),30));
+  const trend = lastMonths(6).map(m=>({ m:m.slice(5), income:Math.round(monthIncome(data,m)), spend:Math.round(totSpend(data,m)) }));
+  const savings = trend.map(t=>({ m:t.m, net:t.income-t.spend }));
+  const fs = fuelStats(data);
+  const al = alerts(data,mk);
+  const endBal = pts[pts.length-1]?.bal||0;
+  return <div className="screen">
+    <div className="card hero row" style={{gap:14}}>
+      <Ring score={score}/>
+      <div style={{flex:1}}>
+        <div className="kv">{monthLabel(mk)}</div>
+        <div className="row" style={{marginTop:6}}>
+          <div><div className="hint">In</div><div className="mono" style={{color:"var(--teal)"}}>{fmt0(inc)}</div></div>
+          <div><div className="hint">Out</div><div className="mono" style={{color:"var(--red)"}}>{fmt0(sp)}</div></div>
+          <div><div className="hint">Net</div><div className="mono" style={{color:inc-sp>=0?"var(--green)":"var(--red)"}}>{fmt0(inc-sp)}</div></div>
+        </div>
+        <div className="hint" style={{marginTop:8}}>🔒 All data lives on this device only</div>
+      </div>
+    </div>
 
-  const toDraft = (p) => setDraft({
-    store: p.store || "Unknown store",
-    date: p.date || new Date().toISOString().slice(0, 10),
-    category: CATS.includes(p.category) ? p.category : "Other",
-    subtotal: p.subtotal ?? 0, tax: p.tax ?? 0, total: p.total ?? 0,
-    litres: p.litres || "", odometer: "",
-    items: (Array.isArray(p.items) ? p.items : []).map(it => ({ unit: "ea", ...it })),
-  });
+    <Sec title="Cash position" right={<span className="mono kv">{fmt0(endBal)} EOM</span>}>
+      <div className="row"><span className="kv">Cash on hand now</span>
+        <input className="mono" style={{width:120,textAlign:"right",padding:"6px 10px"}} inputMode="decimal"
+          value={data.settings.cashOnHand} onChange={e=>persist({...data, settings:{...data.settings, cashOnHand:e.target.value}})}/></div>
+      <MiniArea pts={pts} refZero color="var(--amber)"/>
+      <div className="hint">Projected balance through the month — salary in, bills out, budget pace for the rest.</div>
+    </Sec>
 
-  const processImageBlob = async (blob) => {
-    setBusy(true); setErr("");
-    try {
-      let b64; try { b64 = await fileToJpegBase64(blob); } catch { throw new Error("Image couldn't be read — use the paste-code box below instead."); }
-      let p; try { p = await analyzeBill(b64); } catch (a) { throw new Error(`AI step failed (${String(a.message || a).slice(0, 80)}) — use the paste-code box below.`); }
-      toDraft(p);
-    } catch (ex) { setErr(String(ex.message || ex)); }
+    {al.length>0 && <Sec title="Alerts & recommendations">
+      {al.map((a,i)=><div key={i} className="list-it"><span className={"tag "+a.t}>{a.t==="bad"?"act":"watch"}</span>
+        <span style={{fontSize:13.5}}>{a.m}</span></div>)}
+    </Sec>}
+
+    <Sec title="Upcoming payments" right={<span className="kv">{fmt0(next30.reduce((a,i)=>a+i.amount,0))} / 30d</span>}>
+      {next7.length===0 && <div className="hint">Nothing due in the next 7 days.</div>}
+      {next7.map((it,i)=><div key={i} className="list-it">
+        <span className="ico">{it.ico}</span>
+        <div style={{flex:1}}><div style={{fontSize:14}}>{it.name}</div><div className="hint">{shortDate(it.date)}</div></div>
+        <span className="mono">{fmt0(it.amount)}</span></div>)}
+    </Sec>
+
+    <Sec title="Budget health">
+      {bv.length===0 && <div className="hint">Set category budgets in Money → Budget to unlock forecasts.</div>}
+      {bv.slice(0,6).map(b=><div key={b.cat} style={{marginBottom:10}}>
+        <div className="row" style={{marginBottom:4}}>
+          <span style={{fontSize:13.5}}>{CAT_ICO[b.cat]} {b.cat}</span>
+          <span className="mono kv">{fmt0(b.actual)} / {fmt0(b.budget)}</span>
+        </div>
+        <div className="bar"><i style={{width:clamp(100*b.actual/b.budget,2,100)+"%",
+          background:b.state==="bad"?"var(--red)":b.state==="warn"?"var(--amber)":"var(--green)"}}/></div>
+        {b.state!=="ok" && <div className="hint" style={{marginTop:3}}>forecast {fmt0(b.forecast)} by month-end</div>}
+      </div>)}
+    </Sec>
+
+    <Sec title="Largest spending" open0={false}>
+      {topCats.map(([c,v])=><div key={c} className="list-it"><span className="ico">{CAT_ICO[c]||"◇"}</span>
+        <span style={{flex:1,fontSize:14}}>{c}</span><span className="mono">{fmt0(v)}</span></div>)}
+    </Sec>
+
+    <Sec title="Income vs expense — 6 months" open0={false}>
+      <Bars data={trend} keys={["income","spend"]} colors={["var(--teal)","var(--red)"]}/>
+    </Sec>
+
+    <Sec title="Savings trend" open0={false}>
+      <Bars data={savings} keys={["net"]} colors={["var(--green)"]}/>
+    </Sec>
+
+    {data.fuel.length>0 && <Sec title="Fuel insights" open0={false}>
+      <div className="grid3">
+        <div><div className="hint">avg / fill</div><div className="mono">{fmt0(fs.avgFill)}</div></div>
+        <div><div className="hint">avg / litre</div><div className="mono">{fmt(fs.avgL)}</div></div>
+        <div><div className="hint">this mo.</div><div className="mono">{fmt0((fs.byM[mk]||{}).cost||0)}</div></div>
+      </div>
+    </Sec>}
+  </div>;
+}
+
+/* ───────── ADD: camera / library / manual → smart classify ───────── */
+function Add({ data, persist, done }){
+  const [busy,setBusy]=useState(""); const [err,setErr]=useState("");
+  const [draft,setDraft]=useState(null); // scanned result awaiting confirm
+  const camRef=useRef(), libRef=useRef();
+  const onPick = async (file) => {
+    if(!file) return; setErr(""); setBusy("Reading your bill…");
+    try{
+      const raw = await new Promise((res,rej)=>{ const r=new FileReader();
+        r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); });
+      const small = await shrink(raw);           // ← token saver
+      const b64 = small.split(",")[1];
+      const txt = await askAI([{type:"image", media:"image/jpeg", data:b64},{type:"text", text:SCAN_PROMPT}], 700);
+      const j = parseJSON(txt);
+      j.date = j.date || todayISO();
+      if (!CATS.includes(j.category)) j.category = j.kind==="fuel"?"Fuel":"Other";
+      setDraft(j);
+    }catch(e){ setErr(e.message||"Could not read that image"); }
+    setBusy("");
+  };
+  if (draft?.kind==="fuel") return <FuelConfirm data={data} persist={persist} j={draft} done={done} back={()=>setDraft(null)}/>;
+  if (draft) return <ExpConfirm data={data} persist={persist} j={draft} done={done} back={()=>setDraft(null)}/>;
+  return <div className="screen">
+    <div className="fr" style={{fontSize:22,margin:"6px 2px 16px"}}>Add a bill</div>
+    {busy && <div className="card row"><span>⏳</span><span>{busy}</span></div>}
+    {err && <div className="card" style={{borderColor:"var(--red)"}}><span className="tag bad">error</span> <span style={{fontSize:13.5}}>{err}</span></div>}
+    <button className="card row full" style={{textAlign:"left"}} onClick={()=>camRef.current.click()}>
+      <span className="ico" style={{fontSize:20}}>📷</span>
+      <div style={{flex:1}}><div>Camera</div><div className="hint">Snap the receipt — AI reads it</div></div><span className="chev">▶</span></button>
+    <button className="card row full" style={{textAlign:"left"}} onClick={()=>libRef.current.click()}>
+      <span className="ico" style={{fontSize:20}}>🖼️</span>
+      <div style={{flex:1}}><div>Photo library</div><div className="hint">Pick an existing photo</div></div><span className="chev">▶</span></button>
+    <button className="card row full" style={{textAlign:"left"}} onClick={()=>setDraft({kind:"expense",manual:true,store:"",date:todayISO(),category:"Groceries",subtotal:0,tax:0,total:0,items:[]})}>
+      <span className="ico" style={{fontSize:20}}>✏️</span>
+      <div style={{flex:1}}><div>Manual entry</div><div className="hint">Type it in — no AI, no cost</div></div><span className="chev">▶</span></button>
+    <input ref={camRef} type="file" accept="image/*" capture="environment" hidden onChange={e=>onPick(e.target.files[0])}/>
+    <input ref={libRef} type="file" accept="image/*" hidden onChange={e=>onPick(e.target.files[0])}/>
+    <div className="hint" style={{margin:"8px 4px"}}>Photos are shrunk on-device before the AI reads them — scans cost ≈ a tenth of a cent.</div>
+  </div>;
+}
+/* expense confirm — thermal receipt, payment source, card link, friend owes, recurring */
+function ExpConfirm({ data, persist, j, done, back }){
+  const [f,setF]=useState({ ...j, paySource:"bank", cardId:data.cards[0]?.id||"", notes:"",
+    friendOn:false, friendName:"", friendAmt:"", recOn:false, recFreq:"monthly", recRemind:3,
+    currency:"CAD" });
+  const upd=(k,v)=>setF(s=>({...s,[k]:v}));
+  const rate=+data.settings.inrRate||1;
+  const cad = f.currency==="INR" ? (+f.total||0)/rate : +f.total||0;
+  const save=()=>{
+    const exp={ id:uid(), store:f.store||"Expense", date:f.date, category:f.category,
+      subtotal:+f.subtotal||cad, tax:+f.tax||0, total:cad, items:f.items||[],
+      paySource:f.paySource, cardId:f.paySource==="card"?f.cardId:"", notes:f.notes,
+      source:f.manual?"manual":"scan" };
+    let d={...data, expenses:[exp,...data.expenses]};
+    if (f.paySource==="card"&&f.cardId){ // roll into that card's cycle
+      d.cards=d.cards.map(c=>c.id!==f.cardId?c:{...c, bills:{...(c.bills||{}), [ym(f.date)]:((((c.bills||{})[ym(f.date)]) ?? (+c.currentBill||0)))+cad }});
+    }
+    if (f.friendOn&&f.friendName&&+f.friendAmt>0)
+      d.receivables=[{id:uid(), name:f.friendName, amount:+f.friendAmt, date:f.date, note:f.store, repaid:[]},...d.receivables];
+    if (f.recOn)
+      d.recurring=[...d.recurring, { id:uid(), name:f.store||f.category, amount:cad, category:f.category,
+        freq:f.recFreq, start:f.date, paySource:f.paySource, cardId:f.cardId, reminderDays:+f.recRemind, overrides:{} }];
+    persist(d); haptic(15); done();
+  };
+  return <div className="screen">
+    <button className="kv" onClick={back}>← back</button>
+    <div className="receipt" style={{margin:"14px 0"}}>
+      <div style={{textAlign:"center",fontWeight:600,letterSpacing:".06em"}}>{(f.store||"NEW EXPENSE").toUpperCase()}</div>
+      <div style={{textAlign:"center",fontSize:11,marginBottom:8}}>{f.date}</div>
+      {(f.items||[]).slice(0,12).map((it,i)=><div key={i} className="row" style={{fontSize:11.5}}>
+        <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.name}</span>
+        <span>{fmt(it.lineTotal)}</span></div>)}
+      <div style={{borderTop:"1px dashed #999",margin:"6px 0"}}/>
+      <div className="row"><span>TAX</span><input value={f.tax} inputMode="decimal" onChange={e=>upd("tax",e.target.value)}
+        style={{width:70,textAlign:"right",background:"transparent",border:"none",borderBottom:"1px dotted #999",borderRadius:0,padding:2,color:"inherit",fontFamily:"inherit",fontSize:12}}/></div>
+      <div className="row" style={{fontWeight:600}}><span>TOTAL {f.currency}</span>
+        <input value={f.total} inputMode="decimal" onChange={e=>upd("total",e.target.value)}
+        style={{width:90,textAlign:"right",background:"transparent",border:"none",borderBottom:"1px dotted #999",borderRadius:0,padding:2,color:"inherit",fontFamily:"inherit",fontWeight:600}}/></div>
+      {f.currency==="INR" && <div style={{fontSize:10.5,textAlign:"right"}}>≈ {fmt(cad)} CAD @ {rate}</div>}
+    </div>
+    {f.manual && <div className="grid2" style={{marginBottom:10}}>
+      <input placeholder="Store / payee" value={f.store} onChange={e=>upd("store",e.target.value)}/>
+      <input type="date" value={f.date} onChange={e=>upd("date",e.target.value)}/>
+    </div>}
+    {f.manual && <div style={{marginBottom:10}}><Pills opts={[["CAD","CAD"],["INR","INR"]]} val={f.currency} onPick={v=>upd("currency",v)}/></div>}
+    <Lbl>Category — AI suggested, tap to override</Lbl>
+    <Pills opts={CATS.map(c=>[c,`${CAT_ICO[c]} ${c}`])} val={f.category} onPick={v=>upd("category",v)}/>
+    <Lbl>Paid with</Lbl>
+    <Pills opts={SRCS} val={f.paySource} onPick={v=>upd("paySource",v)}/>
+    {f.paySource==="card" && (data.cards.length
+      ? <div style={{marginTop:8}}><Pills opts={data.cards.map(c=>[c.id,c.name])} val={f.cardId} onPick={v=>upd("cardId",v)}/></div>
+      : <div className="hint" style={{marginTop:6}}>No cards yet — add one in Money → Cards; saving links it to this month's bill.</div>)}
+    <Lbl>A friend owes part of this?</Lbl>
+    <Pills opts={[[false,"No"],[true,"Yes"]]} val={f.friendOn} onPick={v=>upd("friendOn",v)}/>
+    {f.friendOn && <div className="grid2" style={{marginTop:8}}>
+      <input placeholder="Friend's name" value={f.friendName} onChange={e=>upd("friendName",e.target.value)}/>
+      <input placeholder="Amount owed" inputMode="decimal" value={f.friendAmt} onChange={e=>upd("friendAmt",e.target.value)}/>
+    </div>}
+    <Lbl>Repeats every month?</Lbl>
+    <Pills opts={[[false,"One-time"],[true,"Recurring"]]} val={f.recOn} onPick={v=>upd("recOn",v)}/>
+    {f.recOn && <div style={{marginTop:8}}>
+      <Pills opts={FREQS} val={f.recFreq} onPick={v=>upd("recFreq",v)}/>
+      <Lbl>Remind me</Lbl>
+      <Pills opts={[[0,"Same day"],[1,"1 day before"],[3,"3 days"],[7,"7 days"]]} val={f.recRemind} onPick={v=>upd("recRemind",v)}/>
+    </div>}
+    <input placeholder="Notes (optional)" value={f.notes} onChange={e=>upd("notes",e.target.value)} style={{margin:"12px 0"}}/>
+    <button className="btn p full" onClick={save}>Save expense</button>
+  </div>;
+}
+/* fuel confirm — odometer + full-tank gate for mileage */
+function FuelConfirm({ data, persist, j, done, back }){
+  const [f,setF]=useState({ vendor:j.store||"", date:j.date, cost:j.total||0, litres:j.litres||0,
+    odometer:"", fullTank:true, fuelType:j.fuelType||"Regular" });
+  const upd=(k,v)=>setF(s=>({...s,[k]:v}));
+  const save=()=>{
+    const fu={ id:uid(), ...f, cost:+f.cost||0, litres:+f.litres||0, odometer:+f.odometer||0 };
+    const exp={ id:uid(), store:f.vendor||"Fuel", date:f.date, category:"Fuel", subtotal:+f.cost||0,
+      tax:0, total:+f.cost||0, items:[], paySource:"card", source:"fuel" };
+    persist({ ...data, fuel:[fu,...data.fuel], expenses:[exp,...data.expenses] }); haptic(15); done();
+  };
+  return <div className="screen">
+    <button className="kv" onClick={back}>← back</button>
+    <div className="card hero" style={{marginTop:12}}>
+      <div className="sec-t">⛽ Fuel detected</div>
+      <div className="grid2" style={{marginTop:10}}>
+        <div><Lbl>Vendor</Lbl><input value={f.vendor} onChange={e=>upd("vendor",e.target.value)}/></div>
+        <div><Lbl>Date</Lbl><input type="date" value={f.date} onChange={e=>upd("date",e.target.value)}/></div>
+        <div><Lbl>Cost (CAD)</Lbl><input inputMode="decimal" value={f.cost} onChange={e=>upd("cost",e.target.value)}/></div>
+        <div><Lbl>Litres</Lbl><input inputMode="decimal" value={f.litres} onChange={e=>upd("litres",e.target.value)}/></div>
+        <div><Lbl>Odometer (km)</Lbl><input inputMode="numeric" placeholder="e.g. 48210" value={f.odometer} onChange={e=>upd("odometer",e.target.value)}/></div>
+        <div><Lbl>Fuel type</Lbl><input value={f.fuelType} onChange={e=>upd("fuelType",e.target.value)}/></div>
+      </div>
+      <Lbl>Is this a full tank?</Lbl>
+      <Pills opts={[[true,"Yes — count mileage"],[false,"No — just log it"]]} val={f.fullTank} onPick={v=>upd("fullTank",v)}/>
+      {!f.fullTank && <div className="hint" style={{marginTop:6}}>Partial fill saved without mileage math — accuracy stays honest.</div>}
+      <button className="btn p full" style={{marginTop:14}} onClick={save}>Save fuel purchase</button>
+    </div>
+  </div>;
+}
+
+/* ───────── MONEY: Income | Budget | Cards | Friends ───────── */
+function Money({ data, persist, mk }){
+  const [seg,setSeg]=useState("income");
+  return <div className="screen">
+    <div className="seg">
+      {[["income","Income"],["budget","Budget"],["cards","Cards"],["friends","Friends"]].map(([v,l])=>
+        <button key={v} className={seg===v?"on":""} onClick={()=>setSeg(v)}>{l}</button>)}
+    </div>
+    {seg==="income" && <Income data={data} persist={persist} mk={mk}/>}
+    {seg==="budget" && <Budget data={data} persist={persist} mk={mk}/>}
+    {seg==="cards" && <Cards data={data} persist={persist} mk={mk}/>}
+    {seg==="friends" && <Friends data={data} persist={persist}/>}
+  </div>;
+}
+/* Income: streams, payslip AI analysis, salary calendar, cash-flow dashboard */
+function Income({ data, persist, mk }){
+  const [edit,setEdit]=useState(null); const [busy,setBusy]=useState(false); const [err,setErr]=useState("");
+  const fileRef=useRef();
+  const evs = incomeEvents(data,mk);
+  const ps = data.settings.payslip;
+  const flow = lastMonths(6).map(m=>{ const inc=monthIncome(data,m), sp=totSpend(data,m);
+    const ind=(+data.settings.indiaMonthlyINR||0)/(+data.settings.inrRate||1);
+    return { m:m.slice(5), income:Math.round(inc), expenses:Math.round(sp), net:Math.round(inc-sp), india:Math.round(ind) }; });
+  const analysePayslip = async (file) => {
+    if(!file) return; setErr(""); setBusy(true);
+    try{
+      const raw=await new Promise((res,rej)=>{const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file);});
+      const small=await shrink(raw); const b64=small.split(",")[1];
+      const j=parseJSON(await askAI([{type:"image",media:"image/jpeg",data:b64},{type:"text",text:PAYSLIP_PROMPT}],400));
+      const per={weekly:52,biweekly:26,semimonthly:24,monthly:12}[j.payFreq]||26;
+      persist({...data, settings:{...data.settings, payslip:{...j, per,
+        monthlyNet:Math.round(j.net*per/12), annualNet:Math.round(j.net*per),
+        annualGross:Math.round(j.gross*per), taxRate:j.gross>0?Math.round(100*(j.gross-j.net)/j.gross):0 }}});
+    }catch(e){ setErr(e.message||"Could not read payslip"); }
     setBusy(false);
   };
-
-  const onFile = async (e) => {
-    const file = e.target.files?.[0]; e.target.value = "";
-    if (file) await processImageBlob(file);
+  const saveStream = s => { const arr=data.incomes.some(x=>x.id===s.id)
+      ? data.incomes.map(x=>x.id===s.id?s:x) : [...data.incomes, s];
+    persist({...data, incomes:arr}); setEdit(null); };
+  const overrideEvent = (ev, patch) => {
+    persist({...data, incomes:data.incomes.map(s=>s.id!==ev.id?s:
+      {...s, overrides:{...(s.overrides||{}), [ev.date]:{...((s.overrides||{})[ev.date]||{}), ...patch}}})});
   };
-
-  const pastePhoto = async () => {
-    setErr("");
-    try {
-      const items = await navigator.clipboard.read();
-      for (const item of items) {
-        const type = item.types.find(t => t.startsWith("image/"));
-        if (type) { await processImageBlob(await item.getType(type)); return; }
-      }
-      setErr("No photo on the clipboard. In Photos: open the bill photo → Share → Copy Photo, then tap this again.");
-    } catch {
-      setErr("Clipboard access was blocked here — allow it when asked, or use the paste-code box below.");
-    }
-  };
-
-  const tryImport = () => {
-    setImportErr("");
-    try { toDraft(JSON.parse(importText.trim())); setImportText(""); }
-    catch { setImportErr("Not a valid import code — paste exactly what Claude or your Siri shortcut produced."); }
-  };
-
-  const save = () => {
-    const exp = { id: crypto.randomUUID(), store: draft.store, date: draft.date, category: draft.category,
-      subtotal: +draft.subtotal || 0, tax: +draft.tax || 0, total: +draft.total || 0,
-      items: draft.items.filter(it => it.name).map(it => ({ name: it.name, qty: +it.qty || 1, unit: it.unit || "ea", lineTotal: +it.lineTotal || 0 })),
-      source: "scan" };
-    let fuel = data.fuel;
-    if (draft.category === "Fuel" && +draft.litres > 0)
-      fuel = [...fuel, { id: crypto.randomUUID(), date: draft.date, odometer: +draft.odometer || 0, litres: +draft.litres, cost: +draft.total || 0, fromScan: true }];
-    persist({ ...data, expenses: [exp, ...data.expenses], fuel });
-    setDraft(null);
-  };
-
-  if (draft) return <ReceiptCard draft={draft} setDraft={setDraft} onSave={save} onDiscard={() => setDraft(null)} />;
-
-  return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <Card style={{ textAlign: "center", padding: 24 }}>
-        <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 4 }}>{busy ? "Reading your bill…" : "Add a bill"}</div>
-        <div style={{ fontSize: 13, color: T.dim, marginBottom: 16 }}>
-          {busy ? "Extracting items, weights, tax, totals" : "Every item, weight and tax captured — feeding your dashboard and price comparisons."}
-        </div>
-        <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-          <label style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 8, background: busy ? T.surface2 : T.amber, color: busy ? T.dim : "#1A1408", borderRadius: 12, padding: "12px 16px", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>
-            {busy ? <Loader2 size={16} /> : <Camera size={16} />} Camera
-            <input type="file" accept="image/*" capture="environment" onChange={onFile} disabled={busy}
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0 }} />
-          </label>
-          <label style={{ position: "relative", display: "inline-flex", alignItems: "center", gap: 8, background: "transparent", color: T.paper, border: `1px solid ${T.line}`, borderRadius: 12, padding: "12px 16px", fontSize: 15, fontWeight: 600, cursor: "pointer", opacity: busy ? 0.5 : 1 }}>
-            Photo library
-            <input type="file" accept="image/*" onChange={onFile} disabled={busy}
-              style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0 }} />
-          </label>
-          <Btn onClick={pastePhoto} disabled={busy} tone="ghost">Paste</Btn>
-        </div>
-        <div style={{ fontSize: 11, color: T.dim, marginTop: 12 }}>
-          Camera opens directly — snap the bill, AI reads it, you approve before saving.
-        </div>
-        {err && <div style={{ color: T.red, fontSize: 13, marginTop: 12 }}>{err}</div>}
-      </Card>
-
-      <Card>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <MessageSquareText size={16} color={T.amber} />
-          <span style={{ fontWeight: 600 }}>Paste from Claude or Siri</span>
-          <span style={{ fontSize: 11, color: T.green, background: T.surface2, borderRadius: 6, padding: "2px 8px" }}>always works</span>
-        </div>
-        <div style={{ fontSize: 12, color: T.dim, marginBottom: 10 }}>
-          Send the bill photo to Claude in chat and ask for a "Lakshmi import code" — or use the Siri shortcut below — then paste here.
-        </div>
-        <textarea value={importText} onChange={e => setImportText(e.target.value)} rows={3}
-          placeholder='{"store":"...","items":[...]}'
-          style={{ width: "100%", boxSizing: "border-box", background: T.surface2, border: "1px solid transparent", color: T.paper, borderRadius: 10, padding: 10, fontSize: 13, fontFamily: "ui-monospace,monospace", outline: "none", resize: "vertical" }} />
-        <Btn onClick={tryImport} disabled={!importText.trim()} style={{ marginTop: 8 }}><Check size={15} /> Load for review</Btn>
-        {importErr && <div style={{ color: T.red, fontSize: 12, marginTop: 8 }}>{importErr}</div>}
-      </Card>
-
-      <Card>
-        <button onClick={() => setShowSiri(!showSiri)} style={{ background: "none", border: "none", color: T.paper, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, width: "100%", padding: 0, fontSize: 15, fontWeight: 600 }}>
-          <Mic size={16} color={T.amber} /> Set up "Hey Siri, scan bill"
-          <span style={{ marginLeft: "auto" }}>{showSiri ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</span>
-        </button>
-        {showSiri && <div style={{ fontSize: 13, color: T.dim, marginTop: 12, lineHeight: 1.75 }}>
-          In the <b style={{ color: T.paper }}>Shortcuts</b> app on your iPhone, create a new shortcut with these actions:<br />
-          1. <b style={{ color: T.paper }}>Take Photo</b> (or Select Photos)<br />
-          2. <b style={{ color: T.paper }}>Ask ChatGPT</b> (needs the ChatGPT app) — attach the photo and use this exact prompt:<br />
-          <span style={{ fontFamily: "ui-monospace,monospace", fontSize: 11, color: T.paper, background: T.surface2, display: "block", borderRadius: 8, padding: 10, margin: "8px 0", wordBreak: "break-all" }}>
-            Read this receipt. Reply with ONLY raw JSON, no other text: {IMPORT_SCHEMA}
-          </span>
-          3. <b style={{ color: T.paper }}>Copy to Clipboard</b><br />
-          Name it "Scan bill". Then: say <i>"Hey Siri, scan bill"</i>, photograph the receipt, open Lakshmi and paste in the box above. Works with Claude's app too if you prefer — same prompt.
-        </div>}
-      </Card>
-
-      <Card>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div><div style={{ fontWeight: 600 }}>Manual entry</div>
-            <div style={{ fontSize: 12, color: T.dim }}>Cash, rent, ₹ expenses — with optional items & weights</div></div>
-          <Btn tone="ghost" onClick={() => setShowManual(!showManual)}>{showManual ? "Close" : "Add"}</Btn>
-        </div>
-        {showManual && <ManualForm inrRate={+data.settings.inrRate || 1}
-          onSave={(exp, recurring) => {
-            let d = { ...data, expenses: [exp, ...data.expenses] };
-            if (recurring) d.recurring = [...d.recurring, { id: crypto.randomUUID(), store: exp.store, category: exp.category, total: exp.total, lastPosted: thisMonth() }];
-            persist(d); setShowManual(false);
-          }} />}
-      </Card>
-
-      {data.recurring.length > 0 && <Card>
-        <Label>Recurring monthly (auto-added on the 1st)</Label>
-        {data.recurring.map(r => (
-          <div key={r.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 14, padding: "6px 0" }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 8 }}><Repeat size={14} color={T.amber} /> {r.store} · {r.category}</span>
-            <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontFamily: "ui-monospace,monospace" }}>{fmt(r.total)}</span>
-              <button onClick={() => persist({ ...data, recurring: data.recurring.filter(x => x.id !== r.id) })}
-                style={{ background: "none", border: "none", color: T.dim, cursor: "pointer" }}><Trash2 size={15} /></button>
-            </span>
-          </div>))}
-      </Card>}
-    </div>
-  );
-}
-
-function ManualForm({ onSave, inrRate }) {
-  const [f, setF] = useState({ store: "", date: new Date().toISOString().slice(0, 10), category: "Groceries", total: "", tax: "", currency: "CAD", recurring: false });
-  const [items, setItems] = useState([]);
-  const itemsSum = items.reduce((a, it) => a + (+it.lineTotal || 0), 0);
-  const effTotal = +f.total || (itemsSum ? +(itemsSum + (+f.tax || 0)).toFixed(2) : 0);
-  const cadTotal = f.currency === "INR" ? effTotal / inrRate : effTotal;
-  const updItem = (i, k, v) => setItems(items.map((it, j) => j === i ? { ...it, [k]: v } : it));
-  return (
-    <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
-      <Input placeholder="Store / payee" value={f.store} onChange={e => setF({ ...f, store: e.target.value })} />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <Input type="date" value={f.date} onChange={e => setF({ ...f, date: e.target.value })} />
-        <Select value={f.category} onChange={e => setF({ ...f, category: e.target.value })}>{CATS.map(c => <option key={c}>{c}</option>)}</Select>
+  return <>
+    <Sec title="Payslip analysis" right={ps&&<span className="tag ok">{ps.taxRate}% eff. tax</span>}>
+      {ps ? <div className="grid3">
+        <div><div className="hint">net / pay</div><div className="mono">{fmt0(ps.net)}</div></div>
+        <div><div className="hint">monthly net</div><div className="mono">{fmt0(ps.monthlyNet)}</div></div>
+        <div><div className="hint">annual net</div><div className="mono">{fmt0(ps.annualNet)}</div></div>
+        <div><div className="hint">gross / yr</div><div className="mono">{fmt0(ps.annualGross)}</div></div>
+        <div><div className="hint">CPP+EI / pay</div><div className="mono">{fmt0((+ps.cpp||0)+(+ps.ei||0))}</div></div>
+        <div><div className="hint">pension</div><div className="mono">{fmt0(ps.pension)}</div></div>
+      </div> : <div className="hint">Upload one sample payslip — the AI extracts gross, taxes, CPP, EI, pension and models your take-home. One small AI call (~half a cent).</div>}
+      {err && <div className="tag bad" style={{marginTop:8}}>{err}</div>}
+      <button className="btn g full" style={{marginTop:10}} disabled={busy} onClick={()=>fileRef.current.click()}>
+        {busy?"Analysing…":(ps?"Re-analyse a payslip":"Upload payslip photo")}</button>
+      <input ref={fileRef} type="file" accept="image/*" hidden onChange={e=>analysePayslip(e.target.files[0])}/>
+    </Sec>
+    <Sec title="Income streams" right={<button className="pill" onClick={()=>setEdit({id:uid(),name:"",type:"recurring",net:"",freq:"biweekly",nextPay:todayISO(),overrides:{}})}>+ add</button>}>
+      {data.incomes.length===0 && <div className="hint">Add your salary — and your spouse's, side income or one-time bonuses.</div>}
+      {data.incomes.map(s=><div key={s.id} className="list-it" onClick={()=>setEdit(s)} style={{cursor:"pointer"}}>
+        <span className="ico">{s.type==="one"?"✨":"💼"}</span>
+        <div style={{flex:1}}><div style={{fontSize:14}}>{s.name||"Income"}</div>
+          <div className="hint">{s.type==="one"?`one-time · ${s.date||""}`:`${s.freq} · next ${s.nextPay||"—"}`}</div></div>
+        <span className="mono" style={{color:"var(--teal)"}}>{fmt0(s.net)}</span></div>)}
+    </Sec>
+    <Sec title="Salary calendar — this month">
+      {evs.length===0 && <div className="hint">Set a next-pay date on a stream to project pay days.</div>}
+      {evs.map(ev=><div key={ev.k} className="list-it">
+        <span className="ico">📅</span>
+        <div style={{flex:1}}><div style={{fontSize:14}}>{ev.name}</div><div className="hint">{shortDate(ev.date)}</div></div>
+        <span className="mono" style={{color:"var(--teal)"}}>{fmt0(ev.amount)}</span>
+        {!ev.one && <div style={{display:"flex",gap:4}}>
+          <button className="pill" title="Delayed a week" onClick={()=>overrideEvent(ev,{moveTo:addDays(ev.date,7)})}>+7d</button>
+          <button className="pill" title="Did not receive" onClick={()=>overrideEvent(ev,{skip:true})}>skip</button>
+        </div>}</div>)}
+      <div className="hint" style={{marginTop:6}}>Salary late or missing? Push it a week or skip it — the cash projection updates instantly.</div>
+    </Sec>
+    <Sec title="Cash-flow dashboard">
+      <Bars data={flow} keys={["income","expenses"]} colors={["var(--teal)","var(--red)"]}/>
+      <div className="grid3" style={{marginTop:8}}>
+        <div><div className="hint">net this mo.</div><div className="mono">{fmt0(flow[5]?.net||0)}</div></div>
+        <div><div className="hint">India / mo.</div><div className="mono">{fmt0(flow[5]?.india||0)}</div></div>
+        <div><div className="hint">savings goal</div><div className="mono">{fmt0(data.settings.savingsGoal)}</div></div>
       </div>
-      <div>
-        <div style={{ fontSize: 12, color: T.dim, marginBottom: 5 }}>Items (optional — powers price comparison)</div>
-        {items.map((it, i) => (
-          <div key={i} style={{ display: "flex", gap: 5, marginBottom: 6 }}>
-            <Input placeholder="tomatoes" value={it.name} onChange={e => updItem(i, "name", e.target.value)} style={{ flex: 2, padding: "9px 10px", fontSize: 13 }} />
-            <Input placeholder="qty" inputMode="decimal" value={it.qty} onChange={e => updItem(i, "qty", e.target.value)} style={{ width: 48, padding: "9px 6px", fontSize: 13 }} />
-            <Select value={it.unit} onChange={e => updItem(i, "unit", e.target.value)} style={{ width: 60, padding: "9px 4px", fontSize: 13 }}>
-              {UNITS.map(u => <option key={u}>{u}</option>)}
-            </Select>
-            <Input placeholder="$" inputMode="decimal" value={it.lineTotal} onChange={e => updItem(i, "lineTotal", e.target.value)} style={{ width: 62, padding: "9px 6px", fontSize: 13 }} />
-            <button onClick={() => setItems(items.filter((_, j) => j !== i))}
-              style={{ background: "none", border: "none", color: T.dim, cursor: "pointer" }}><Trash2 size={15} /></button>
-          </div>))}
-        <Btn tone="ghost" onClick={() => setItems([...items, { name: "", qty: 1, unit: "ea", lineTotal: "" }])} style={{ padding: "8px 12px", fontSize: 13 }}>
-          <Plus size={14} /> Add item</Btn>
-        {itemsSum > 0 && <span style={{ fontSize: 12, color: T.dim, marginLeft: 10 }}>items {fmt(itemsSum)}</span>}
+    </Sec>
+    {edit && <Sheet onClose={()=>setEdit(null)}>
+      <div className="fr" style={{fontSize:18,marginBottom:8}}>{edit.name?edit.name:"New income"}</div>
+      <Lbl>Type</Lbl><Pills opts={[["recurring","Recurring salary"],["one","One-time"]]} val={edit.type} onPick={v=>setEdit({...edit,type:v})}/>
+      <Lbl>Name</Lbl><input value={edit.name} placeholder="Primary salary / Spouse / Bonus…" onChange={e=>setEdit({...edit,name:e.target.value})}/>
+      <Lbl>{edit.type==="one"?"Amount":"Net take-home per pay"}</Lbl>
+      <input inputMode="decimal" value={edit.net} onChange={e=>setEdit({...edit,net:e.target.value})}/>
+      {edit.type==="one"
+        ? <><Lbl>Date received</Lbl><input type="date" value={edit.date||todayISO()} onChange={e=>setEdit({...edit,date:e.target.value})}/></>
+        : <><Lbl>Frequency</Lbl><Pills opts={FREQS.filter(f=>f[0]!=="quarterly"&&f[0]!=="annual")} val={edit.freq} onPick={v=>setEdit({...edit,freq:v})}/>
+          <Lbl>Next pay date</Lbl><input type="date" value={edit.nextPay} onChange={e=>setEdit({...edit,nextPay:e.target.value})}/></>}
+      <div className="row" style={{marginTop:14,gap:8}}>
+        <button className="btn d" onClick={()=>{persist({...data,incomes:data.incomes.filter(x=>x.id!==edit.id)});setEdit(null);}}>Delete</button>
+        <button className="btn p" style={{flex:1}} onClick={()=>saveStream({...edit,net:+edit.net||0})}>Save</button>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-        <Select value={f.currency} onChange={e => setF({ ...f, currency: e.target.value })}><option>CAD</option><option>INR</option></Select>
-        <Input placeholder={`Total ${f.currency === "INR" ? "₹" : "$"}${itemsSum ? " (auto)" : ""}`} inputMode="decimal" value={f.total} onChange={e => setF({ ...f, total: e.target.value })} />
-        <Input placeholder="Tax $" inputMode="decimal" value={f.tax} onChange={e => setF({ ...f, tax: e.target.value })} />
-      </div>
-      {f.currency === "INR" && effTotal > 0 && <div style={{ fontSize: 12, color: T.dim }}>≈ {fmt(cadTotal)} CAD at rate {inrRate}</div>}
-      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: T.dim }}>
-        <input type="checkbox" checked={f.recurring} onChange={e => setF({ ...f, recurring: e.target.checked })} />
-        Repeat monthly (rent, mortgage, subscriptions — auto-logged on the 1st)
-      </label>
-      <Btn disabled={!f.store || !effTotal} onClick={() => { onSave({
-        id: crypto.randomUUID(), store: f.store, date: f.date, category: f.category,
-        total: +cadTotal.toFixed(2), tax: +f.tax || 0, subtotal: +(cadTotal - (+f.tax || 0)).toFixed(2),
-        items: items.filter(it => it.name && +it.lineTotal).map(it => ({ name: it.name, qty: +it.qty || 1, unit: it.unit || "ea", lineTotal: +it.lineTotal })),
-        source: "manual", ...(f.currency === "INR" ? { origINR: effTotal } : {}) }, f.recurring); setItems([]); }}>
-        <Plus size={16} /> Save expense
-      </Btn>
-    </div>
-  );
+    </Sheet>}
+  </>;
 }
-
-/* ── DASHBOARD (with computed intelligence + optional AI narrative) ── */
-function DashboardTab({ data }) {
-  const now = thisMonth();
-  const last = new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString().slice(0, 7);
-  const [aiText, setAiText] = useState("");
-  const [aiBusy, setAiBusy] = useState(false);
-
-  const byMonth = useMemo(() => {
-    const m = {};
-    data.expenses.forEach(e => { const k = monthKey(e.date); m[k] = m[k] || { spend: 0, tax: 0, cats: {} };
-      m[k].spend += e.total; m[k].tax += e.tax; m[k].cats[e.category] = (m[k].cats[e.category] || 0) + e.total; });
-    return m;
-  }, [data.expenses]);
-  const cur = byMonth[now] || { spend: 0, tax: 0, cats: {} };
-  const prev = byMonth[last] || { spend: 0, cats: {} };
-  const months = Object.keys(byMonth).sort().slice(-6);
-  const trend = months.map(k => ({ m: k.slice(5) + "/" + k.slice(2, 4), spend: +byMonth[k].spend.toFixed(2) }));
-  const catData = Object.entries(cur.cats).map(([name, value]) => ({ name, value: +value.toFixed(2) })).sort((a, b) => b.value - a.value);
-
-  /* computed intelligence */
-  const insights = useMemo(() => {
-    const out = [];
-    const day = new Date().getDate();
-    const daysIn = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-    if (cur.spend > 0) {
-      const burn = cur.spend / day, projected = burn * daysIn;
-      out.push({ icon: "🔥", text: `Daily burn ${fmt(burn)} → month-end projection ${fmt(projected)}${prev.spend ? ` (last month ${fmt(prev.spend)})` : ""}.` });
-    }
-    let jump = null;
-    Object.entries(cur.cats).forEach(([c, v]) => {
-      const p = prev.cats[c] || 0;
-      if (p > 20 && v > p * 1.4 && (!jump || v - p > jump.d)) jump = { c, d: v - p, v, p };
-    });
-    if (jump) out.push({ icon: "📈", text: `${jump.c} is up ${fmt(jump.d)} vs last month (${fmt(jump.p)} → ${fmt(jump.v)}).` });
-    const taxYTD = Object.entries(byMonth).filter(([k]) => k.startsWith(now.slice(0, 4))).reduce((a, [, v]) => a + v.tax, 0);
-    if (taxYTD > 0) out.push({ icon: "🧾", text: `Sales tax paid this year: ${fmt(taxYTD)}.` });
-    const big = data.expenses.filter(e => monthKey(e.date) === now).sort((a, b) => b.total - a.total)[0];
-    if (big) out.push({ icon: "💸", text: `Biggest bill this month: ${big.store} ${fmt(big.total)} (${big.category}).` });
-    return out;
-  }, [byMonth, cur, prev, data.expenses, now]);
-
-  const aiInsights = async () => {
-    setAiBusy(true); setAiText("");
-    try {
-      const summary = months.map(k => `${k}: total ${byMonth[k].spend.toFixed(0)}, ` +
-        Object.entries(byMonth[k].cats).map(([c, v]) => `${c} ${v.toFixed(0)}`).join(", ")).join("\n");
-      const text = await askAI([{ type: "text", text:
-        `You are a sharp personal-finance analyst. Monthly spending data (CAD):\n${summary}\nGive exactly 3 short, specific observations with actionable advice. Plain text, no markdown, max 90 words total.` }], 400);
-      setAiText(text.trim());
-    } catch { setAiText("AI insights unavailable right now — the computed insights above still apply."); }
-    setAiBusy(false);
+/* Budget: edit budgets + analytics + drill-in */
+function Budget({ data, persist, mk }){
+  const bv=budgetView(data,mk); const [drill,setDrill]=useState(null);
+  const spent=catSpend(data,mk);
+  const hist3 = c => { const ms=lastMonths(4).slice(0,3); const v=ms.map(m=>catSpend(data,m)[c]||0);
+    return v.reduce((a,b)=>a+b,0)/3; };
+  return <>
+    <Sec title="Monthly budgets">
+      {CATS.map(c=><div key={c} className="row" style={{marginBottom:8}}>
+        <span style={{fontSize:13.5,flex:1}}>{CAT_ICO[c]} {c}</span>
+        <span className="mono hint" style={{width:74,textAlign:"right"}}>{fmt0(spent[c]||0)}</span>
+        <input inputMode="decimal" placeholder="—" value={data.budgets[c]||""} style={{width:86,textAlign:"right",padding:"7px 10px"}}
+          onChange={e=>persist({...data,budgets:{...data.budgets,[c]:e.target.value}})}/>
+      </div>)}
+    </Sec>
+    <Sec title="Projected vs actual">
+      {bv.map(b=>{ const avg=hist3(b.cat); const delta=avg>0?Math.round(100*(b.actual-avg)/avg):0;
+        return <div key={b.cat} className="list-it" onClick={()=>setDrill(b.cat)} style={{cursor:"pointer"}}>
+        <span className="ico">{CAT_ICO[b.cat]}</span>
+        <div style={{flex:1}}><div style={{fontSize:14}}>{b.cat}</div>
+          <div className="hint">3-mo avg {fmt0(avg)}{avg>0&&` · ${delta>=0?"+":""}${delta}% vs avg`}</div></div>
+        <div style={{textAlign:"right"}}><div className="mono" style={{fontSize:13}}>{fmt0(b.actual)}</div>
+          <span className={"tag "+b.state}>{b.state==="ok"?"on track":b.state==="warn"?"→ "+fmt0(b.forecast):"over"}</span></div>
+      </div>;})}
+      {bv.length===0 && <div className="hint">Set budgets above to unlock forecasts and alerts.</div>}
+    </Sec>
+    {drill && <Sheet onClose={()=>setDrill(null)}>
+      <div className="fr" style={{fontSize:18}}>{CAT_ICO[drill]} {drill} — history</div>
+      <Bars data={lastMonths(6).map(m=>({m:m.slice(5), v:Math.round(catSpend(data,m)[drill]||0)}))} keys={["v"]} colors={["var(--amber)"]}/>
+      {monthExp(data,mk).filter(e=>e.category===drill).map(e=><div key={e.id} className="list-it">
+        <div style={{flex:1}}><div style={{fontSize:13.5}}>{e.store}</div><div className="hint">{shortDate(e.date)}</div></div>
+        <span className="mono">{fmt(e.total)}</span></div>)}
+    </Sheet>}
+  </>;
+}
+/* Cards: statement/due, this-month bill, pay = settlement (never double-counted) */
+function Cards({ data, persist, mk }){
+  const [edit,setEdit]=useState(null);
+  const payBill=(c)=>{
+    const amt=((c.bills||{})[mk] ?? (+c.currentBill||0)); if(!(amt>0)) return;
+    persist({...data,
+      settlements:[...data.settlements,{id:uid(),cardId:c.id,amount:amt,date:todayISO()}],
+      expenses:[{id:uid(),kind:"settlement",store:`${c.name} bill payment`,date:todayISO(),category:"Card payment",total:amt,items:[],paySource:"bank",source:"settlement"},...data.expenses],
+      cards:data.cards.map(x=>x.id!==c.id?x:{...x,paidMonths:{...(x.paidMonths||{}),[mk]:true}})});
+    haptic(15);
   };
-
-  if (!data.expenses.length) return <Card style={{ textAlign: "center", padding: 32 }}>
-    <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 6 }}>Your ledger is empty</div>
-    <div style={{ fontSize: 13, color: T.dim }}>Add your first bill — the dashboard builds itself from there.</div></Card>;
-
-  const delta = prev.spend ? ((cur.spend - prev.spend) / prev.spend) * 100 : 0;
-  const th = ontarioTakeHome(+data.settings.salary || 0, +data.settings.rrsp || 0);
-  const inflow = th.monthly + incomesMonthly(data.settings);
-  const indiaCAD = (+data.settings.indiaMonthlyINR || 0) / (+data.settings.inrRate || 1);
-  const saved = inflow - cur.spend - indiaCAD;
-  return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <Card>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", textAlign: "center" }}>
-          <div><Label>In</Label><Num size={18} color={T.green}>{fmt(inflow)}</Num></div>
-          <div><Label>Spent</Label><Num size={18} color={T.amber}>{fmt(cur.spend)}</Num></div>
-          <div><Label>Saved</Label><Num size={18} color={saved >= 0 ? T.green : T.red}>{fmt(saved)}</Num></div>
-        </div>
-        <div style={{ fontSize: 11, color: T.dim, textAlign: "center", marginTop: 8 }}>
-          This month · household income − spending − India commitments
-        </div>
-      </Card>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <Card><Label>This month</Label><Num color={T.amber}>{fmt(cur.spend)}</Num>
-          <div style={{ fontSize: 12, color: delta > 0 ? T.red : T.green, display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
-            {delta > 0 ? <TrendingUp size={13} /> : <TrendingDown size={13} />}{Math.abs(delta).toFixed(0)}% vs last</div></Card>
-        <Card><Label>Tax paid</Label><Num>{fmt(cur.tax)}</Num>
-          <div style={{ fontSize: 12, color: T.dim, marginTop: 4 }}>{data.expenses.filter(e => monthKey(e.date) === now).length} bills this month</div></Card>
+  return <>
+    <div className="hint" style={{margin:"0 2px 10px"}}>Card purchases count toward budgets when they happen. Paying the bill only moves cash — it's never double-counted as spending.</div>
+    {data.cards.map(c=>{ const bill=((c.bills||{})[mk] ?? (+c.currentBill||0)); const paid=(c.paidMonths||{})[mk];
+      return <div key={c.id} className="card">
+      <div className="row"><div className="row" style={{gap:8}}><span className="ico">💳</span><b>{c.name}</b></div>
+        {paid?<span className="tag ok">paid</span>:<span className="tag warn">due {pad(c.dueDay||21)}</span>}</div>
+      <div className="grid3" style={{margin:"10px 0"}}>
+        <div><div className="hint">this month</div><div className="mono">{fmt0(bill)}</div></div>
+        <div><div className="hint">min pay</div><div className="mono">{fmt0(c.minPayment)}</div></div>
+        <div><div className="hint">statement</div><div className="mono">{pad(c.statementDay||1)}</div></div>
       </div>
-
-      <Card>
-        <Label>Insights</Label>
-        {insights.map((ins, i) => (
-          <div key={i} style={{ display: "flex", gap: 10, fontSize: 13.5, padding: "6px 0", lineHeight: 1.5 }}>
-            <span>{ins.icon}</span><span>{ins.text}</span>
-          </div>))}
-        <Btn tone="ghost" onClick={aiInsights} disabled={aiBusy} style={{ marginTop: 8, padding: "9px 14px", fontSize: 13 }}>
-          {aiBusy ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Sparkles size={14} color={T.amber} />} Deeper AI read
-        </Btn>
-        {aiText && <div style={{ fontSize: 13.5, marginTop: 10, padding: 12, background: T.surface2, borderRadius: 10, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{aiText}</div>}
-      </Card>
-
-      <Card>
-        <Label>Trend</Label>
-        <ResponsiveContainer width="100%" height={160}>
-          <LineChart data={trend} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-            <CartesianGrid stroke={T.line} strokeDasharray="3 3" />
-            <XAxis dataKey="m" stroke={T.dim} fontSize={11} /><YAxis stroke={T.dim} fontSize={11} />
-            <Tooltip contentStyle={tipStyle} />
-            <Line type="monotone" dataKey="spend" stroke={T.amber} strokeWidth={2.5} dot={{ fill: T.amber, r: 3 }} />
-          </LineChart>
-        </ResponsiveContainer>
-      </Card>
-
-      <Card>
-        <Label>Where it went · {now}</Label>
-        <div style={{ display: "flex", alignItems: "center" }}>
-          <ResponsiveContainer width="45%" height={150}>
-            <PieChart><Pie data={catData} dataKey="value" innerRadius={38} outerRadius={62} paddingAngle={2}>
-              {catData.map((c, i) => <Cell key={i} fill={catColor(c.name)} stroke="none" />)}</Pie>
-              <Tooltip contentStyle={tipStyle} /></PieChart>
-          </ResponsiveContainer>
-          <div style={{ flex: 1, display: "grid", gap: 6 }}>
-            {catData.slice(0, 6).map(c => (
-              <div key={c.name} style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: 2, background: catColor(c.name) }} />{c.name}</span>
-                <span style={{ fontFamily: "ui-monospace,monospace" }}>{fmt(c.value)}</span>
-              </div>))}
-          </div>
-        </div>
-      </Card>
-    </div>
-  );
-}
-
-/* ── LEDGER ── */
-function LedgerTab({ data, persist }) {
-  const [q, setQ] = useState("");
-  const list = data.expenses.filter(e =>
-    !q || (e.store + e.category + (e.items || []).map(i => i.name).join(" ")).toLowerCase().includes(q.toLowerCase()));
-  const exportCSV = () => {
-    const rows = [["date", "store", "category", "subtotal", "tax", "total", "source", "items"]];
-    data.expenses.forEach(e => rows.push([e.date, e.store, e.category, e.subtotal, e.tax, e.total, e.source,
-      (e.items || []).map(i => `${i.name} ${i.qty}${i.unit || ""} @${i.lineTotal}`).join("; ")]));
-    const csv = rows.map(r => r.map(c => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    a.download = `lakshmi-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-  };
-  return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <div style={{ display: "flex", gap: 8 }}>
-        <Input placeholder="Search store, item, category…" value={q} onChange={e => setQ(e.target.value)} />
-        <Btn tone="ghost" onClick={exportCSV} style={{ padding: "10px 12px" }}><Download size={16} /></Btn>
+      <div className="row" style={{gap:8}}>
+        <input inputMode="decimal" placeholder="Update this month's bill" style={{flex:1}}
+          onChange={e=>persist({...data,cards:data.cards.map(x=>x.id!==c.id?x:{...x,bills:{...(x.bills||{}),[mk]:+e.target.value||0}})})}/>
+        <button className="btn g" onClick={()=>setEdit(c)}>Edit</button>
+        {!paid && <button className="btn p" onClick={()=>payBill(c)}>Mark paid</button>}
       </div>
-      {list.length === 0 && <Card style={{ textAlign: "center", color: T.dim, fontSize: 13 }}>Nothing here yet — add a bill in the Add tab.</Card>}
-      {list.map(e => (
-        <Card key={e.id} style={{ padding: 14 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <div style={{ fontWeight: 600, fontSize: 15 }}>{e.store}</div>
-              <div style={{ fontSize: 12, color: T.dim }}>{e.date} · <span style={{ color: catColor(e.category) }}>{e.category}</span>
-                {e.tax > 0 && <> · tax {fmt(e.tax)}</>}{e.items?.length ? <> · {e.items.length} items</> : null}
-                {e.origINR ? <> · {inr(e.origINR)}</> : null}{e.source === "recurring" && <> · <Repeat size={11} style={{ verticalAlign: "-1px" }} /> auto</>}</div>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <Num size={17} color={T.amber}>{fmt(e.total)}</Num>
-              <button onClick={() => persist({ ...data, expenses: data.expenses.filter(x => x.id !== e.id) })}
-                style={{ background: "none", border: "none", color: T.dim, cursor: "pointer" }}><Trash2 size={16} /></button>
-            </div>
-          </div>
-        </Card>))}
-    </div>
-  );
+    </div>;})}
+    <button className="btn g full" onClick={()=>setEdit({id:uid(),name:"",statementDay:1,dueDay:21,currentBill:"",minPayment:"",reminderDays:3,bills:{},paidMonths:{}})}>+ Add credit card</button>
+    {edit && <Sheet onClose={()=>setEdit(null)}>
+      <div className="fr" style={{fontSize:18,marginBottom:8}}>{edit.name||"New card"}</div>
+      <Lbl>Card name</Lbl><input value={edit.name} placeholder="e.g. TD Cashback Visa" onChange={e=>setEdit({...edit,name:e.target.value})}/>
+      <div className="grid2">
+        <div><Lbl>Statement day</Lbl><input inputMode="numeric" value={edit.statementDay} onChange={e=>setEdit({...edit,statementDay:+e.target.value||1})}/></div>
+        <div><Lbl>Payment due day</Lbl><input inputMode="numeric" value={edit.dueDay} onChange={e=>setEdit({...edit,dueDay:+e.target.value||21})}/></div>
+        <div><Lbl>Current bill</Lbl><input inputMode="decimal" value={edit.currentBill} onChange={e=>setEdit({...edit,currentBill:e.target.value})}/></div>
+        <div><Lbl>Min payment</Lbl><input inputMode="decimal" value={edit.minPayment} onChange={e=>setEdit({...edit,minPayment:e.target.value})}/></div>
+      </div>
+      <Lbl>Remind me</Lbl>
+      <Pills opts={[[0,"Same day"],[1,"1 day"],[3,"3 days"],[7,"7 days"]]} val={edit.reminderDays} onPick={v=>setEdit({...edit,reminderDays:v})}/>
+      <div className="row" style={{marginTop:14,gap:8}}>
+        <button className="btn d" onClick={()=>{persist({...data,cards:data.cards.filter(x=>x.id!==edit.id)});setEdit(null);}}>Delete</button>
+        <button className="btn p" style={{flex:1}} onClick={()=>{persist({...data,cards:data.cards.some(x=>x.id===edit.id)?data.cards.map(x=>x.id===edit.id?edit:x):[...data.cards,edit]});setEdit(null);}}>Save</button>
+      </div>
+    </Sheet>}
+  </>;
 }
-
-/* ── PRICES (weight-aware: compares $/kg, $/L, $/ea) ── */
-function PricesTab({ data }) {
-  const rows = useMemo(() => {
-    const norm = (s) => (s || "").toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/\s+/g, " ").trim();
-    const m = {};
-    data.expenses.forEach(e => (e.items || []).forEach(it => {
-      const k = norm(it.name); if (!k) return;
-      const up = unitPrice(it); if (!up.value || !isFinite(up.value)) return;
-      m[k] = m[k] || { name: it.name, per: up.per, stores: {} };
-      (m[k].stores[e.store] = m[k].stores[e.store] || []).push({ price: up.value, date: e.date });
-    }));
-    return Object.values(m)
-      .map(r => ({ ...r, entries: Object.entries(r.stores).map(([store, prices]) => ({
-          store, n: prices.length, price: prices.sort((a, b) => b.date.localeCompare(a.date))[0].price,
-        })).sort((a, b) => a.price - b.price) }))
-      .filter(r => r.entries.length >= 2)
-      .map(r => ({ ...r, save: ((r.entries.at(-1).price - r.entries[0].price) / r.entries.at(-1).price) * 100 }))
-      .sort((a, b) => b.save - a.save);
-  }, [data.expenses]);
-  return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <Card style={{ padding: 14 }}>
-        <div style={{ fontWeight: 600, marginBottom: 2 }}>Store rate card</div>
-        <div style={{ fontSize: 12, color: T.dim }}>Weight-aware comparison — 500 g at one store vs 1 kg at another still compares fairly, per kg.</div>
-      </Card>
-      {rows.length === 0 && <Card style={{ textAlign: "center", color: T.dim, fontSize: 13, padding: 24 }}>
-        Once the same item (e.g. "tomatoes") appears on bills from two stores, the cheaper store gets flagged here — by $/kg for weighed goods.</Card>}
-      {rows.map(r => (
-        <Card key={r.name} style={{ padding: 14 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-            <span style={{ fontWeight: 600, textTransform: "capitalize" }}>{r.name} <span style={{ color: T.dim, fontWeight: 400, fontSize: 12 }}>per {r.per}</span></span>
-            {r.save > 1 && <span style={{ fontSize: 12, color: T.green, fontWeight: 600 }}>save {r.save.toFixed(0)}%</span>}
-          </div>
-          {r.entries.map((s, i) => (
-            <div key={s.store} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "5px 0", color: i === 0 ? T.green : T.paper }}>
-              <span>{i === 0 ? "✓ " : ""}{s.store} <span style={{ color: T.dim }}>×{s.n}</span></span>
-              <span style={{ fontFamily: "ui-monospace,monospace" }}>{fmt(s.price)}/{r.per}</span>
-            </div>))}
-        </Card>))}
+/* Friends: receivables ledger */
+function Friends({ data, persist }){
+  const [amt,setAmt]=useState({});
+  const out=data.receivables.reduce((a,r)=>a+recvOut(r),0);
+  const rec=data.receivables.reduce((a,r)=>a+(r.repaid||[]).reduce((x,y)=>x+(+y.amount||0),0),0);
+  return <>
+    <div className="card hero grid2">
+      <div><div className="hint">outstanding</div><div className="fr big" style={{color:"var(--amber)"}}>{fmt0(out)}</div></div>
+      <div><div className="hint">recovered</div><div className="fr big" style={{color:"var(--green)"}}>{fmt0(rec)}</div></div>
     </div>
-  );
-}
-
-/* ── BUDGET & INCOME (segmented: set income once, budgets separately) ── */
-function BudgetTab({ data, persist }) {
-  const [view, setView] = useState("income");
-  const s = data.settings;
-  const th = useMemo(() => ontarioTakeHome(+s.salary || 0, +s.rrsp || 0), [s.salary, s.rrsp]);
-  const now = thisMonth();
-  const actuals = useMemo(() => {
-    const m = {}; data.expenses.filter(e => monthKey(e.date) === now).forEach(e => m[e.category] = (m[e.category] || 0) + e.total); return m;
-  }, [data.expenses, now]);
-  const setS = (k, v) => persist({ ...data, settings: { ...s, [k]: v } });
-  const setBudget = (c, v) => persist({ ...data, budgets: { ...data.budgets, [c]: +v || 0 } });
-  const inrRate = +s.inrRate || 1;
-  const indiaCAD = (+s.indiaMonthlyINR || 0) / inrRate;
-  const myPay = s.payFreq === "weekly" ? th.net / 52 : s.payFreq === "monthly" ? th.monthly : th.biweekly;
-  const household = th.monthly + incomesMonthly(s);
-  const totalBudget = Object.values(data.budgets).reduce((a, b) => a + b, 0);
-  const projSavings = household - totalBudget - indiaCAD;
-  const monthSpend = Object.values(actuals).reduce((a, b) => a + b, 0);
-  const actualSavings = household - monthSpend - indiaCAD;
-  const goal = +s.savingsGoal || 0;
-  const monthlyBase = Math.max(0, projSavings);
-  const proj = Array.from({ length: 12 }, (_, i) => ({
-    m: new Date(new Date().setMonth(new Date().getMonth() + i + 1)).toLocaleString("en", { month: "short" }),
-    projected: +(monthlyBase * (i + 1)).toFixed(0), goal: +(goal * (i + 1)).toFixed(0),
-  }));
-  const addIncome = () => setS("incomes", [...(s.incomes || []), { id: crypto.randomUUID(), name: "", amount: "", freq: "biweekly" }]);
-  const updIncome = (id, k, v) => setS("incomes", s.incomes.map(x => x.id === id ? { ...x, [k]: v } : x));
-  const rmIncome = (id) => setS("incomes", s.incomes.filter(x => x.id !== id));
-  const FlowRow = ({ label, value, color, bold }) => (
-    <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", fontSize: 14, fontWeight: bold ? 700 : 400, borderTop: bold ? `1px solid ${T.line}` : "none" }}>
-      <span style={{ color: bold ? T.paper : T.dim }}>{label}</span>
-      <span style={{ fontFamily: "ui-monospace,monospace", color: color || T.paper }}>{value}</span>
-    </div>);
-  const seg = (k, label) => (
-    <button onClick={() => setView(k)} style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "none", cursor: "pointer",
-      background: view === k ? T.amber : "transparent", color: view === k ? "#1A1408" : T.dim, fontWeight: 600, fontSize: 14 }}>{label}</button>);
-
-  return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <div style={{ display: "flex", background: T.surface, borderRadius: 12, padding: 4 }}>{seg("income", "Income")}{seg("budgets", "Budgets")}</div>
-
-      {view === "income" && <>
-        <Card>
-          <Label>Your salary · Ontario 2026 rules</Label>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
-            <Field label="Gross salary (CAD/yr)"><Input inputMode="numeric" value={s.salary} onChange={e => setS("salary", e.target.value)} /></Field>
-            <Field label="RRSP (CAD/yr)"><Input inputMode="numeric" value={s.rrsp} onChange={e => setS("rrsp", e.target.value)} /></Field>
-          </div>
-          <Field label="You get paid">
-            <Select value={s.payFreq} onChange={e => setS("payFreq", e.target.value)}>
-              <option value="weekly">Weekly</option><option value="biweekly">Bi-weekly</option><option value="monthly">Monthly</option>
-            </Select>
-          </Field>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 12 }}>
-            <div><Label>Net per paycheque</Label><Num color={T.green}>{fmt(myPay)}</Num>
-              <div style={{ fontSize: 11, color: T.dim }}>{FREQ_LABEL[s.payFreq]}</div></div>
-            <div><Label>Net / month</Label><Num>{fmt(th.monthly)}</Num></div>
-          </div>
-          <div style={{ marginTop: 12, fontSize: 12, color: T.dim, lineHeight: 1.7, fontFamily: "ui-monospace,monospace" }}>
-            Federal {fmt(th.fed)} · Ontario {fmt(th.on)} (surtax {fmt(th.surtax)}, health prem. {fmt(th.ohp)})<br />
-            CPP+CPP2 {fmt(th.cpp)} · EI {fmt(th.ei)} → annual net {fmt(th.net)}
-          </div>
-          <div style={{ marginTop: 8, fontSize: 11, color: T.dim }}>Estimate on verified 2026 rates — confirm payroll-exact figures with CRA's PDOC.</div>
-        </Card>
-
-        <Card>
-          <Label>Other income sources</Label>
-          <div style={{ fontSize: 12, color: T.dim, marginBottom: 10 }}>Wife's pay, cash benefits, rental income, side work — each with its own schedule. Set once; edit anytime.</div>
-          {(s.incomes || []).map(src => (
-            <div key={src.id} style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center" }}>
-              <Input placeholder="e.g. Wife's salary" value={src.name} onChange={e => updIncome(src.id, "name", e.target.value)} style={{ flex: 2, padding: "9px 10px", fontSize: 13 }} />
-              <Input placeholder="net $" inputMode="decimal" value={src.amount} onChange={e => updIncome(src.id, "amount", e.target.value)} style={{ width: 74, padding: "9px 8px", fontSize: 13 }} />
-              <Select value={src.freq} onChange={e => updIncome(src.id, "freq", e.target.value)} style={{ width: 96, padding: "9px 6px", fontSize: 13 }}>
-                <option value="weekly">weekly</option><option value="biweekly">bi-weekly</option>
-                <option value="monthly">monthly</option><option value="yearly">yearly</option>
-              </Select>
-              <button onClick={() => rmIncome(src.id)} style={{ background: "none", border: "none", color: T.dim, cursor: "pointer" }}><Trash2 size={15} /></button>
-            </div>))}
-          <Btn tone="ghost" onClick={addIncome} style={{ padding: "9px 14px", fontSize: 13 }}><Plus size={14} /> Add income source</Btn>
-          {incomesMonthly(s) > 0 && <div style={{ fontSize: 12, color: T.dim, marginTop: 8 }}>
-            Other income ≈ {fmt(incomesMonthly(s))}/month (weekly ×52, bi-weekly ×26, spread over 12 months)</div>}
-        </Card>
-
-        <Card>
-          <Label>Monthly money flow</Label>
-          <Field label="India commitments (₹/mo)"><Input inputMode="numeric" value={s.indiaMonthlyINR} onChange={e => setS("indiaMonthlyINR", e.target.value)} style={{ marginBottom: 10 }} /></Field>
-          <FlowRow label={`Your take-home (${FREQ_LABEL[s.payFreq]} pay)`} value={fmt(th.monthly)} />
-          <FlowRow label="+ Other income" value={fmt(incomesMonthly(s))} />
-          <FlowRow label="− Budgeted spending" value={`−${fmt(totalBudget)}`} color={T.red} />
-          <FlowRow label={`− India (${inr(+s.indiaMonthlyINR || 0)})`} value={`−${fmt(indiaCAD)}`} color={T.red} />
-          <FlowRow label="= Projected savings / mo" value={fmt(projSavings)} color={projSavings >= goal ? T.green : T.red} bold />
-          <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            <Field label="Desired savings (/mo)"><Input inputMode="numeric" value={s.savingsGoal} onChange={e => setS("savingsGoal", e.target.value)} /></Field>
-            <div><Label>vs goal</Label>
-              <Num size={19} color={projSavings >= goal ? T.green : T.red}>{projSavings >= goal ? "+" : ""}{fmt(projSavings - goal)}</Num></div>
-          </div>
-          <div style={{ marginTop: 10, fontSize: 12, color: actualSavings >= goal ? T.green : T.red }}>
-            Actuals: spent {fmt(monthSpend)} this month → real savings pace {fmt(actualSavings)} ({actualSavings >= goal ? "on" : "behind"} goal).
-          </div>
-        </Card>
-      </>}
-
-      {view === "budgets" && <>
-        <Card>
-          <Label>Budgets vs actuals · {now}</Label>
-          <div style={{ fontSize: 12, color: T.dim, marginBottom: 10 }}>Set each category once — they stay until you change them.</div>
-          {CATS.map(c => {
-            const b = data.budgets[c] || 0, a = actuals[c] || 0;
-            if (!b && !a) return (
-              <div key={c} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "4px 0", color: T.dim }}>
-                <span>{c}</span>
-                <input value="" placeholder="set $" inputMode="numeric" onChange={e => setBudget(c, e.target.value)}
-                  style={{ width: 60, background: T.surface2, border: "none", borderRadius: 6, color: T.paper, fontSize: 12, padding: "3px 6px", textAlign: "right" }} />
-              </div>);
-            const pct = b ? Math.min(100, (a / b) * 100) : 0;
-            return (
-              <div key={c} style={{ marginBottom: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
-                  <span>{c}</span>
-                  <span style={{ fontFamily: "ui-monospace,monospace", color: b && a > b ? T.red : T.dim }}>
-                    {fmt(a)} / <input value={b || ""} placeholder="0" inputMode="numeric" onChange={e => setBudget(c, e.target.value)}
-                      style={{ width: 56, background: T.surface2, border: "none", borderRadius: 6, color: T.paper, fontSize: 12, padding: "3px 6px", textAlign: "right" }} /></span>
-                </div>
-                <div style={{ height: 6, background: T.surface2, borderRadius: 3 }}>
-                  <div style={{ height: 6, width: `${pct}%`, background: a > b && b ? T.red : catColor(c), borderRadius: 3, transition: "width .3s" }} />
-                </div>
-              </div>);
-          })}
-          <div style={{ fontSize: 12, color: T.dim, marginTop: 6 }}>Total budgeted {fmt(totalBudget)} · household income {fmt(household)}/mo</div>
-        </Card>
-
-        <Card>
-          <Label>12-month savings · CAD & INR</Label>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
-            <Field label="CAD→INR"><Input inputMode="decimal" value={s.inrRate} onChange={e => setS("inrRate", e.target.value)} /></Field>
-            <div><Label>Year CAD</Label><Num size={17} color={T.green}>{fmt(monthlyBase * 12)}</Num></div>
-            <div><Label>Year INR</Label><Num size={17} color={T.amber}>{inr(monthlyBase * 12 * inrRate)}</Num></div>
-          </div>
-          <ResponsiveContainer width="100%" height={150}>
-            <LineChart data={proj} margin={{ top: 4, right: 4, left: -14, bottom: 0 }}>
-              <CartesianGrid stroke={T.line} strokeDasharray="3 3" />
-              <XAxis dataKey="m" stroke={T.dim} fontSize={10} interval={1} /><YAxis stroke={T.dim} fontSize={10} />
-              <Tooltip contentStyle={tipStyle} />
-              <Line type="monotone" dataKey="projected" stroke={T.green} strokeWidth={2.5} dot={false} />
-              <Line type="monotone" dataKey="goal" stroke={T.amber} strokeWidth={1.5} strokeDasharray="5 4" dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-          <div style={{ fontSize: 11, color: T.dim, marginTop: 4 }}>Solid: projected from money flow · dashed: goal.</div>
-        </Card>
-      </>}
-    </div>
-  );
-}
-
-/* ── FUEL ── */
-function FuelTab({ data, persist }) {
-  const [f, setF] = useState({ date: new Date().toISOString().slice(0, 10), odometer: "", litres: "", cost: "" });
-  const [trip, setTrip] = useState({ km: "", price: "" });
-  const logs = [...data.fuel].filter(l => l.odometer > 0).sort((a, b) => a.odometer - b.odometer);
-  const noOdo = data.fuel.filter(l => !l.odometer);
-  const stats = logs.map((l, i) => {
-    if (i === 0) return { ...l };
-    const km = l.odometer - logs[i - 1].odometer;
-    return { ...l, km, kmpl: km > 0 && l.litres ? km / l.litres : null, cpk: km > 0 && l.cost ? l.cost / km : null };
-  });
-  const withEff = stats.filter(s => s.kmpl);
-  const avg = withEff.length ? withEff.reduce((a, s) => a + s.kmpl, 0) / withEff.length : 0;
-  const lastPrice = data.fuel.length ? (data.fuel.at(-1).cost / (data.fuel.at(-1).litres || 1)) : 0;
-  const tripCost = avg > 0 ? ((+trip.km || 0) / avg) * (+trip.price || lastPrice || 0) : 0;
-  const setOdo = (id, v) => persist({ ...data, fuel: data.fuel.map(l => l.id === id ? { ...l, odometer: +v || 0 } : l) });
-
-  return (
-    <div style={{ display: "grid", gap: 12 }}>
-      {noOdo.length > 0 && <Card style={{ outline: `1px solid ${T.amber}` }}>
-        <Label>Scanned fill-ups — add odometer</Label>
-        {noOdo.map(l => (
-          <div key={l.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 13, padding: "6px 0" }}>
-            <span>{l.date} · {l.litres} L · {fmt(l.cost)}</span>
-            <input placeholder="odometer km" inputMode="numeric" onBlur={e => e.target.value && setOdo(l.id, e.target.value)}
-              style={{ width: 110, background: T.surface2, border: "none", borderRadius: 8, color: T.paper, fontSize: 13, padding: "7px 9px", textAlign: "right" }} />
-          </div>))}
-      </Card>}
-      <Card>
-        <Label>Log a fill-up</Label>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-          <Input type="date" value={f.date} onChange={e => setF({ ...f, date: e.target.value })} />
-          <Input placeholder="Odometer (km)" inputMode="numeric" value={f.odometer} onChange={e => setF({ ...f, odometer: e.target.value })} />
-          <Input placeholder="Litres" inputMode="decimal" value={f.litres} onChange={e => setF({ ...f, litres: e.target.value })} />
-          <Input placeholder="Cost $" inputMode="decimal" value={f.cost} onChange={e => setF({ ...f, cost: e.target.value })} />
-        </div>
-        <Btn style={{ marginTop: 10, width: "100%" }} disabled={!+f.odometer || !+f.litres}
-          onClick={() => { persist({ ...data, fuel: [...data.fuel, { id: crypto.randomUUID(), date: f.date, odometer: +f.odometer, litres: +f.litres, cost: +f.cost || 0 }] });
-            setF({ ...f, odometer: "", litres: "", cost: "" }); }}>
-          <Fuel size={16} /> Add fill-up</Btn>
-        <div style={{ fontSize: 11, color: T.dim, marginTop: 8 }}>Fuel bills added via scan or paste land here automatically — just add the odometer.</div>
-      </Card>
-      {withEff.length > 0 && <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-        <Card><Label>Avg mileage</Label><Num color={T.green}>{avg.toFixed(1)} <span style={{ fontSize: 13 }}>km/L</span></Num></Card>
-        <Card><Label>Latest cost/km</Label><Num>{fmt(withEff.at(-1).cpk)}</Num></Card>
+    {data.receivables.map(r=>{ const o=recvOut(r);
+      return <div key={r.id} className="card">
+      <div className="row"><b>{r.name}</b><span className={"tag "+(o>0?"warn":"ok")}>{o>0?fmt0(o)+" pending":"settled"}</span></div>
+      <div className="hint">{r.note||"expense"} · {shortDate(r.date)} · total {fmt0(r.amount)}</div>
+      {o>0 && <div className="row" style={{marginTop:10,gap:8}}>
+        <input inputMode="decimal" placeholder={"Repayment (max "+fmt0(o)+")"} value={amt[r.id]||""}
+          onChange={e=>setAmt({...amt,[r.id]:e.target.value})} style={{flex:1}}/>
+        <button className="btn p" onClick={()=>{ const a=clamp(+amt[r.id]||o,0.01,o);
+          persist({...data,receivables:data.receivables.map(x=>x.id!==r.id?x:{...x,repaid:[...(x.repaid||[]),{amount:a,date:todayISO()}]})});
+          setAmt({...amt,[r.id]:""}); haptic(); }}>Record</button>
       </div>}
-      <Card>
-        <Label>Trip cost estimator</Label>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 8 }}>
-          <Field label="Distance (km)"><Input inputMode="numeric" value={trip.km} onChange={e => setTrip({ ...trip, km: e.target.value })} /></Field>
-          <Field label={`Fuel $/L ${lastPrice ? `(last ${lastPrice.toFixed(2)})` : ""}`}>
-            <Input inputMode="decimal" placeholder={lastPrice ? lastPrice.toFixed(2) : "1.60"} value={trip.price} onChange={e => setTrip({ ...trip, price: e.target.value })} /></Field>
-        </div>
-        {avg > 0 && +trip.km > 0
-          ? <div style={{ display: "flex", alignItems: "center", gap: 8 }}><Route size={18} color={T.amber} />
-              <Num size={19} color={T.amber}>{fmt(tripCost)}</Num>
-              <span style={{ fontSize: 12, color: T.dim }}>at your avg {avg.toFixed(1)} km/L</span></div>
-          : <div style={{ fontSize: 12, color: T.dim }}>Needs your average mileage — log two consecutive fill-ups with odometer readings.</div>}
-      </Card>
-      {withEff.length > 0 && <Card>
-        <Label>Mileage per fill</Label>
-        <ResponsiveContainer width="100%" height={150}>
-          <LineChart data={withEff.map(s => ({ d: s.date.slice(5), kmpl: +s.kmpl.toFixed(1) }))} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-            <CartesianGrid stroke={T.line} strokeDasharray="3 3" />
-            <XAxis dataKey="d" stroke={T.dim} fontSize={11} /><YAxis stroke={T.dim} fontSize={11} />
-            <Tooltip contentStyle={tipStyle} />
-            <Line type="monotone" dataKey="kmpl" stroke={T.green} strokeWidth={2.5} dot={{ fill: T.green, r: 3 }} />
-          </LineChart>
-        </ResponsiveContainer>
-      </Card>}
-      {stats.slice().reverse().map(l => (
-        <Card key={l.id} style={{ padding: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: 13 }}>
-            <div style={{ fontWeight: 600 }}>{l.date} · {l.odometer.toLocaleString()} km {l.fromScan && <span style={{ color: T.amber }}>· from bill</span>}</div>
-            <div style={{ color: T.dim }}>{l.litres} L · {fmt(l.cost)}{l.kmpl ? ` · ${l.kmpl.toFixed(1)} km/L · ${fmt(l.cpk)}/km` : " · baseline"}</div>
-          </div>
-          <button onClick={() => persist({ ...data, fuel: data.fuel.filter(x => x.id !== l.id) })}
-            style={{ background: "none", border: "none", color: T.dim, cursor: "pointer" }}><Trash2 size={16} /></button>
-        </Card>))}
-    </div>
-  );
+    </div>;})}
+    {data.receivables.length===0 && <div className="hint" style={{margin:"6px 4px"}}>When you pay for a friend, flag it while saving the expense — it lands here for tracking.</div>}
+  </>;
 }
 
-/* ── PIN LOCK ── */
-function PinGate({ pin, onUnlock }) {
-  const [entry, setEntry] = useState("");
-  const [wrong, setWrong] = useState(false);
-  const press = (d) => {
-    const next = entry + d;
-    if (next.length >= pin.length) {
-      if (next === pin) onUnlock();
-      else { setWrong(true); setEntry(""); setTimeout(() => setWrong(false), 900); }
-    } else setEntry(next);
+/* ───────── CALENDAR: month grid + upcoming, mark paid / snooze / edit ───────── */
+function CalendarScr({ data, persist, mk, setMk }){
+  const [sel,setSel]=useState(todayISO()); const [editIt,setEditIt]=useState(null); const [view,setView]=useState("month");
+  const items=monthItems(data,mk), evs=incomeEvents(data,mk);
+  const byDay={}; items.forEach(i=>(byDay[i.date]=byDay[i.date]||[]).push(i));
+  evs.forEach(e=>(byDay[e.date]=byDay[e.date]||[]).push({type:"pay",name:e.name,date:e.date,amount:e.amount,ico:"📅",status:"income"}));
+  const first=new Date(mk+"-01T12:00:00"), lead=first.getDay(), days=dim(mk);
+  const setRecOverride=(it,patch,allFuture)=>{
+    persist({...data, recurring:data.recurring.map(r=>{
+      if(r.id!==it.id) return r;
+      if(allFuture&&patch.amount!=null) return {...r, amount:+patch.amount, overrides:{...(r.overrides||{})}};
+      return {...r, overrides:{...(r.overrides||{}), [mk]:{...((r.overrides||{})[mk]||{}), ...patch}}};
+    })}); setEditIt(null);
   };
-  return (
-    <div style={{ minHeight: "100vh", background: T.bg, color: T.paper, display: "grid", placeItems: "center", fontFamily: "-apple-system,sans-serif" }}>
-      <div style={{ textAlign: "center" }}>
-        <Lock size={36} color={T.amber} style={{ marginBottom: 12 }} />
-        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>Lakshmi locked</div>
-        <div style={{ fontSize: 13, color: wrong ? T.red : T.dim, marginBottom: 18 }}>{wrong ? "Wrong PIN — try again" : "Enter your PIN"}</div>
-        <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 22 }}>
-          {Array.from({ length: pin.length }).map((_, i) => (
-            <div key={i} style={{ width: 12, height: 12, borderRadius: "50%", background: i < entry.length ? T.amber : T.surface2 }} />))}
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,64px)", gap: 12, justifyContent: "center" }}>
-          {["1","2","3","4","5","6","7","8","9","","0","⌫"].map((d, i) => d === "" ? <div key={i} /> : (
-            <button key={i} onClick={() => d === "⌫" ? setEntry(entry.slice(0, -1)) : press(d)}
-              style={{ width: 64, height: 64, borderRadius: "50%", background: T.surface, border: "none", color: T.paper, fontSize: 22, cursor: "pointer" }}>{d}</button>))}
-        </div>
-      </div>
+  const markPaid=(it)=>{
+    if(it.type==="card"){ const c=data.cards.find(x=>x.id===it.id); if(c){
+      persist({...data,
+        settlements:[...data.settlements,{id:uid(),cardId:c.id,amount:it.amount,date:todayISO()}],
+        expenses:[{id:uid(),kind:"settlement",store:`${c.name} bill payment`,date:todayISO(),category:"Card payment",total:it.amount,items:[],paySource:"bank",source:"settlement"},...data.expenses],
+        cards:data.cards.map(x=>x.id!==c.id?x:{...x,paidMonths:{...(x.paidMonths||{}),[mk]:true}})}); } }
+    else if(it.type==="rec"){ const r=data.recurring.find(x=>x.id===it.id); if(r){
+      let d={...data, expenses:[{id:uid(),store:r.name,date:todayISO(),category:r.category,total:it.amount,subtotal:it.amount,tax:0,items:[],paySource:r.paySource,cardId:r.cardId,source:"recurring"},...data.expenses]};
+      if(r.paySource==="card"&&r.cardId) d.cards=d.cards.map(c=>c.id!==r.cardId?c:{...c,bills:{...(c.bills||{}),[mk]:(((c.bills||{})[mk]) ?? (+c.currentBill||0))+it.amount}});
+      d.recurring=d.recurring.map(x=>x.id!==r.id?x:{...x,overrides:{...(x.overrides||{}),[mk]:{...((x.overrides||{})[mk]||{}),status:"paid"}}});
+      persist(d); } }
+    haptic(15); setEditIt(null);
+  };
+  const dayList=(byDay[sel]||[]);
+  const stCol={paid:"var(--green)",missed:"var(--red)",upcoming:"var(--amber)",skipped:"var(--faint)",income:"var(--teal)"};
+  return <div className="screen">
+    <div className="row" style={{marginBottom:10}}>
+      <button className="pill" onClick={()=>setMk(addMonths(mk,-1))}>←</button>
+      <span className="fr" style={{fontSize:18}}>{monthLabel(mk)}</span>
+      <button className="pill" onClick={()=>setMk(addMonths(mk,1))}>→</button>
     </div>
-  );
+    <div className="seg">{[["month","Month"],["list","Upcoming list"]].map(([v,l])=>
+      <button key={v} className={view===v?"on":""} onClick={()=>setView(v)}>{l}</button>)}</div>
+    {view==="month" && <>
+      <div className="cal" style={{marginBottom:4}}>
+        {["S","M","T","W","T","F","S"].map((d,i)=><div key={i} style={{textAlign:"center",fontSize:10,color:"var(--faint)"}}>{d}</div>)}
+      </div>
+      <div className="cal card" style={{padding:10}}>
+        {Array.from({length:lead}).map((_,i)=><div key={"x"+i}/>)}
+        {Array.from({length:days}).map((_,i)=>{ const iso=`${mk}-${pad(i+1)}`; const its=byDay[iso]||[];
+          return <button key={iso} className={"d"+(iso===todayISO()?" cur":"")+(iso===sel?" sel":"")} onClick={()=>{setSel(iso);haptic();}}>
+            {i+1}
+            <span className="dots">{its.slice(0,3).map((it,j)=><span key={j} className="dot" style={{background:stCol[it.status]||"var(--amber)"}}/>)}</span>
+          </button>;})}
+      </div>
+      <div className="card">
+        <div className="sec-t" style={{marginBottom:6}}>{shortDate(sel)}</div>
+        {dayList.length===0 && <div className="hint">Nothing scheduled.</div>}
+        {dayList.map((it,i)=><div key={i} className="list-it" style={{cursor:it.type!=="pay"?"pointer":"default"}}
+          onClick={()=>it.type!=="pay"&&it.type!=="india"&&setEditIt(it)}>
+          <span className="ico">{it.ico}</span>
+          <div style={{flex:1}}><div style={{fontSize:14}}>{it.name}</div>
+            <div className="hint">{it.category||""}{it.paySource?` · ${it.paySource}`:""}</div></div>
+          <span className="mono" style={{color:stCol[it.status]}}>{it.status==="income"?"+":""}{fmt0(it.amount)}</span>
+          <span className="tag mut">{it.status}</span>
+        </div>)}
+      </div>
+    </>}
+    {view==="list" && <div className="card">
+      {items.filter(i=>i.status!=="paid"&&i.status!=="skipped").map((it,i)=><div key={i} className="list-it" style={{cursor:"pointer"}} onClick={()=>it.type!=="india"&&setEditIt(it)}>
+        <span className="ico">{it.ico}</span>
+        <div style={{flex:1}}><div style={{fontSize:14}}>{it.name}</div><div className="hint">{shortDate(it.date)} · {it.status}</div></div>
+        <span className="mono">{fmt0(it.amount)}</span></div>)}
+    </div>}
+    {editIt && <Sheet onClose={()=>setEditIt(null)}>
+      <div className="fr" style={{fontSize:18}}>{editIt.name}</div>
+      <div className="hint" style={{margin:"4px 0 12px"}}>{shortDate(editIt.date)} · {fmt0(editIt.amount)}{editIt.minPay>0&&` · min ${fmt0(editIt.minPay)}`}</div>
+      <button className="btn p full" onClick={()=>markPaid(editIt)} style={{marginBottom:8}}>Mark as paid{editIt.type==="rec"?" (logs the expense)":" (records settlement)"}</button>
+      {editIt.type==="rec" && <>
+        <div className="grid2" style={{marginBottom:8}}>
+          <button className="btn g" onClick={()=>setRecOverride(editIt,{snooze:addDays(editIt.date,3)})}>Snooze 3 days</button>
+          <button className="btn g" onClick={()=>setRecOverride(editIt,{status:"skipped"})}>Skip this month</button>
+        </div>
+        <Lbl>Change amount</Lbl>
+        <EditAmt cur={editIt.amount} onThis={v=>setRecOverride(editIt,{amount:v})} onAll={v=>setRecOverride(editIt,{amount:v},true)}/>
+      </>}
+      {editIt.type==="card" && <div className="hint">Adjust this card's bill amount in Money → Cards.</div>}
+    </Sheet>}
+  </div>;
+}
+function EditAmt({ cur, onThis, onAll }){
+  const [v,setV]=useState(cur);
+  return <>
+    <input inputMode="decimal" value={v} onChange={e=>setV(e.target.value)}/>
+    <div className="grid2" style={{marginTop:8}}>
+      <button className="btn g" onClick={()=>onThis(+v||0)}>This month only</button>
+      <button className="btn g" onClick={()=>onAll(+v||0)}>All future months</button>
+    </div>
+  </>;
 }
 
-/* ── SETTINGS ── */
-function SettingsPanel({ data, persist, onClose }) {
-  const s = data.settings;
-  const [newPin, setNewPin] = useState("");
-  const [ai, setAiState] = useState(getAI());
-  const saveAI = (next) => { setAiState(next); setAI(next); };
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", zIndex: 50, display: "grid", placeItems: "end center" }} onClick={onClose}>
-      <div onClick={e => e.stopPropagation()} style={{ background: T.surface, borderRadius: "20px 20px 0 0", padding: 20, width: "100%", maxWidth: 560, boxSizing: "border-box", maxHeight: "85vh", overflowY: "auto" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <div style={{ fontWeight: 700, fontSize: 16 }}>Settings & lock</div>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: T.dim, cursor: "pointer" }}><X size={20} /></button>
-        </div>
-        <div style={{ display: "grid", gap: 12 }}>
-          <Card style={{ padding: 14, background: T.surface2 }}>
-            <Label>AI for bill reading</Label>
-            <div style={{ display: "grid", gap: 8 }}>
-              <Select value={ai.provider || "openai"} onChange={e => saveAI({ ...ai, provider: e.target.value })} style={{ background: T.surface }}>
-                <option value="openai">OpenAI (ChatGPT's engine, gpt-4o-mini)</option>
-                <option value="anthropic">Anthropic (Claude Haiku)</option>
-              </Select>
-              <Input placeholder={ai.key ? "Key saved ✓ — paste to replace" : "Paste your API key"} type="password"
-                onChange={e => e.target.value && saveAI({ ...ai, key: e.target.value.trim() })} style={{ background: T.surface }} />
-            </div>
-            <div style={{ fontSize: 11, color: T.dim, marginTop: 8 }}>
-              Your key is stored only on this phone and sent only to your chosen AI provider when reading a bill (~1¢ per scan). Get one at platform.openai.com or console.anthropic.com — steps in the setup guide.
-            </div>
-          </Card>
-          <Card style={{ padding: 14, background: T.surface2 }}>
-            <Label>App lock</Label>
-            {s.pin
-              ? <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 14 }}>PIN lock on ({s.pin.length} digits)</span>
-                  <Btn tone="ghost" onClick={() => persist({ ...data, settings: { ...s, pin: "" } })}>Turn off</Btn></div>
-              : <div style={{ display: "flex", gap: 8 }}>
-                  <Input placeholder="Set 4–6 digit PIN" inputMode="numeric" value={newPin}
-                    onChange={e => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 6))} style={{ background: T.surface }} />
-                  <Btn disabled={newPin.length < 4} onClick={() => { persist({ ...data, settings: { ...s, pin: newPin } }); setNewPin(""); }}>Set</Btn></div>}
-            <div style={{ fontSize: 11, color: T.dim, marginTop: 8 }}>
-              This PIN gates the app each time it opens. Your phone's own Face ID lock protects the phone itself; true in-app Face ID remains a native-build feature.
-            </div>
-          </Card>
-          <Card style={{ padding: 14, background: T.surface2 }}>
-            <Label>Danger zone</Label>
-            <Btn tone="ghost" style={{ color: T.red, borderColor: T.red }} onClick={() => {
-              if (confirm("Erase ALL data?")) persist(JSON.parse(JSON.stringify(emptyData)));
-            }}><Trash2 size={15} /> Erase all data</Btn>
-          </Card>
-        </div>
-      </div>
+/* ───────── FUEL: vehicle analytics ───────── */
+function Fuel({ data, mk }){
+  const fs=fuelStats(data);
+  const months=lastMonths(6);
+  const trend=months.map(m=>({ m:m.slice(5), cost:Math.round((fs.byM[m]||{}).cost||0), km:Math.round(fs.kmByM[m]||0) }));
+  const mil=months.map(m=>({ m:m.slice(5), v:fs.mAvg[m]?+fs.mAvg[m].toFixed(1):null })).filter(x=>x.v!=null);
+  const fb=+data.budgets["Fuel"]||0, fa=(fs.byM[mk]||{}).cost||0;
+  const vendors=Object.entries(fs.vend).sort((a,b)=>b[1].cost-a[1].cost).slice(0,5);
+  return <div className="screen">
+    <div className="card hero grid3">
+      <div><div className="hint">avg / fill</div><div className="mono fade-num">{fmt0(fs.avgFill)}</div></div>
+      <div><div className="hint">$ / litre</div><div className="mono fade-num">{fmt(fs.avgL)}</div></div>
+      <div><div className="hint">km this mo.</div><div className="mono fade-num">{Math.round(fs.kmByM[mk]||0)}</div></div>
     </div>
-  );
+    {fb>0 && <Sec title="Fuel budget">
+      <div className="row" style={{marginBottom:5}}><span className="kv">this month</span><span className="mono kv">{fmt0(fa)} / {fmt0(fb)}</span></div>
+      <div className="bar"><i style={{width:clamp(100*fa/fb,2,100)+"%",background:fa>fb?"var(--red)":"var(--green)"}}/></div>
+    </Sec>}
+    <Sec title="Cost & distance — 6 months">
+      <Bars data={trend} keys={["cost"]} colors={["var(--amber)"]}/>
+      <div className="hint">Distance uses full-tank odometer legs only — partial fills never distort mileage.</div>
+    </Sec>
+    {mil.length>1 && <Sec title="Mileage trend (L/100km — lower is better)">
+      <div style={{height:120,margin:"6px -8px 0"}}><ResponsiveContainer width="100%" height="100%">
+        <LineChart data={mil} margin={{top:6,right:10,left:10,bottom:0}}>
+          <XAxis dataKey="m" tick={{fontSize:10,fill:"var(--faint)"}} axisLine={false} tickLine={false}/>
+          <YAxis hide domain={["auto","auto"]}/><Tooltip contentStyle={tipStyle}/>
+          <Line dataKey="v" stroke="var(--teal)" strokeWidth={2} dot={{r:3}}/>
+        </LineChart></ResponsiveContainer></div>
+      <div className="grid2" style={{marginTop:8}}>
+        {fs.best && <div><div className="hint">best month</div><div className="mono">{fs.best[0].slice(5)} · {fs.best[1].toFixed(1)}</div></div>}
+        {fs.worst && <div><div className="hint">thirstiest</div><div className="mono">{fs.worst[0].slice(5)} · {fs.worst[1].toFixed(1)}</div></div>}
+      </div>
+    </Sec>}
+    {vendors.length>0 && <Sec title="Where you fill up" open0={false}>
+      {vendors.map(([v,s])=><div key={v} className="list-it">
+        <span style={{flex:1,fontSize:14}}>{v}</span><span className="hint">{s.n}×</span>
+        <span className="mono">{fmt0(s.cost)}</span></div>)}
+    </Sec>}
+    {data.fuel.length===0 && <div className="hint" style={{margin:"8px 4px"}}>Scan a fuel receipt from the + button — it lands here with odometer and full-tank tracking.</div>}
+  </div>;
 }
 
-/* ── APP ── */
-function App() {
-  const [data, setData] = useState(null);
-  const [tab, setTab] = useState("add");
-  const [locked, setLocked] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  useEffect(() => {
-    loadData().then(d => {
-      const applied = applyRecurring(d);
-      if (applied !== d) saveData(applied);
-      setData(applied);
-      if (applied.settings.pin) setLocked(true);
-    });
-  }, []);
-  const persist = (d) => { setData(d); saveData(d); };
-
-  const tabs = [
-    ["add", "Add", Camera], ["dash", "Board", LayoutDashboard], ["exp", "Ledger", ReceiptText],
-    ["prices", "Prices", Scale], ["budget", "Budget", Wallet], ["fuel", "Fuel", Fuel],
-  ];
-
-  if (!data) return <div style={{ minHeight: "100vh", background: T.bg, display: "grid", placeItems: "center" }}>
-    <Loader2 size={28} color={T.amber} style={{ animation: "spin 1s linear infinite" }} /></div>;
-  if (locked) return <PinGate pin={data.settings.pin} onUnlock={() => setLocked(false)} />;
-
-  return (
-    <div style={{ minHeight: "100vh", background: T.bg, color: T.paper, fontFamily: "-apple-system,'Segoe UI',sans-serif" }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}} input:focus,select:focus,textarea:focus{border-color:${T.amber}!important} button:focus-visible{outline:2px solid ${T.amber}}`}</style>
-      <div style={{ maxWidth: 560, margin: "0 auto", padding: "18px 14px 92px" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-            <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>
-              <span style={{ color: T.amber }}>◆</span> Lakshmi</div>
-            <div style={{ fontSize: 11, color: T.dim, letterSpacing: ".12em", textTransform: "uppercase" }}>bills → wealth</div>
-          </div>
-          <button onClick={() => setShowSettings(true)} aria-label="Settings"
-            style={{ background: "none", border: "none", color: T.dim, cursor: "pointer" }}><Settings2 size={20} /></button>
-        </div>
-        {tab === "add" && <AddTab data={data} persist={persist} />}
-        {tab === "dash" && <DashboardTab data={data} />}
-        {tab === "exp" && <LedgerTab data={data} persist={persist} />}
-        {tab === "prices" && <PricesTab data={data} />}
-        {tab === "budget" && <BudgetTab data={data} persist={persist} />}
-        {tab === "fuel" && <FuelTab data={data} persist={persist} />}
-      </div>
-      {showSettings && <SettingsPanel data={data} persist={persist} onClose={() => setShowSettings(false)} />}
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: T.surface, borderTop: `1px solid ${T.line}`, display: "flex", justifyContent: "space-around", padding: "8px 4px calc(8px + env(safe-area-inset-bottom))" }}>
-        {tabs.map(([k, label, Icon]) => (
-          <button key={k} onClick={() => setTab(k)} aria-label={label}
-            style={{ background: "none", border: "none", cursor: "pointer", display: "grid", justifyItems: "center", gap: 3, color: tab === k ? T.amber : T.dim, minWidth: 50 }}>
-            <Icon size={20} /><span style={{ fontSize: 10 }}>{label}</span>
-          </button>))}
-      </div>
+/* ───────── SETTINGS sheet + PIN gate + export ───────── */
+function Settings({ data, persist, onClose }){
+  const s=data.settings, ai=getAI(), u=usage();
+  const set=(k,v)=>persist({...data,settings:{...s,[k]:v}});
+  const [prov,setProv]=useState(ai.provider||"openai"); const [key,setKey]=useState(ai.key||"");
+  const exportCSV=()=>{
+    const rows=[["date","store","category","total","tax","source","paySource","kind"],
+      ...data.expenses.map(e=>[e.date,(e.store||"").replaceAll(",",";"),e.category,e.total,e.tax||0,e.source||"",e.paySource||"",e.kind||"expense"])];
+    const blob=new Blob([rows.map(r=>r.join(",")).join("\n")],{type:"text/csv"});
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+    a.download=`lakshmi-${todayISO()}.csv`; a.click();
+  };
+  const exportJSON=()=>{
+    const blob=new Blob([JSON.stringify(data,null,1)],{type:"application/json"});
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+    a.download=`lakshmi-backup-${todayISO()}.json`; a.click();
+  };
+  const importRef=useRef();
+  const importJSON=f=>{ if(!f)return; const r=new FileReader();
+    r.onload=()=>{ try{ const d=JSON.parse(r.result); if(d&&d.expenses) persist({...emptyData,...d,settings:{...emptyData.settings,...d.settings}}); alert("Backup restored."); }catch{ alert("Not a valid Lakshmi backup."); } };
+    r.readAsText(f); };
+  return <Sheet onClose={onClose}>
+    <div className="fr" style={{fontSize:19,marginBottom:4}}>Settings</div>
+    <div className="hint" style={{marginBottom:10}}>🔒 Everything here stays in this device's storage. Nothing syncs anywhere.</div>
+    <Lbl>Theme</Lbl>
+    <Pills opts={[["dark","Dark"],["light","Light"]]} val={s.theme} onPick={v=>set("theme",v)}/>
+    <Lbl>AI for bill reading — your own key</Lbl>
+    <Pills opts={[["openai","OpenAI (cheapest)"],["anthropic","Claude"]]} val={prov} onPick={setProv}/>
+    <input style={{marginTop:8}} type="password" placeholder="Paste API key (sk-…)" value={key} onChange={e=>setKey(e.target.value)}/>
+    <button className="btn g full" style={{marginTop:8}} onClick={()=>{setAI({provider:prov,key:key.trim()});haptic();alert("Key saved on this device.");}}>Save AI key</button>
+    <div className="row card" style={{marginTop:10}}>
+      <span className="kv">Est. AI spend this month</span>
+      <span className="mono">{u.calls} calls · ${u.cost.toFixed(3)}</span>
     </div>
-  );
+    <div className="grid2" style={{marginTop:4}}>
+      <div><Lbl>INR rate (₹/CAD)</Lbl><input inputMode="decimal" value={s.inrRate} onChange={e=>set("inrRate",e.target.value)}/></div>
+      <div><Lbl>India transfer ₹/mo</Lbl><input inputMode="decimal" value={s.indiaMonthlyINR} onChange={e=>set("indiaMonthlyINR",e.target.value)}/></div>
+      <div><Lbl>Savings goal / mo</Lbl><input inputMode="decimal" value={s.savingsGoal} onChange={e=>set("savingsGoal",e.target.value)}/></div>
+      <div><Lbl>App PIN (blank = off)</Lbl><input inputMode="numeric" value={s.pin} onChange={e=>set("pin",e.target.value)}/></div>
+    </div>
+    <Lbl>Your data, your hands</Lbl>
+    <div className="grid3">
+      <button className="btn g" onClick={exportCSV}>CSV</button>
+      <button className="btn g" onClick={exportJSON}>Backup</button>
+      <button className="btn g" onClick={()=>importRef.current.click()}>Restore</button>
+    </div>
+    <input ref={importRef} type="file" accept="application/json" hidden onChange={e=>importJSON(e.target.files[0])}/>
+    <button className="btn d full" style={{marginTop:12}} onClick={()=>{ if(confirm("Erase ALL data on this device?")) persist(JSON.parse(JSON.stringify(emptyData))); }}>Erase all data</button>
+  </Sheet>;
+}
+function PinGate({ pin, onOk }){
+  const [v,setV]=useState("");
+  useEffect(()=>{ if(v===pin) onOk(); },[v]);
+  return <div className="screen" style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"80vh"}}>
+    <div style={{fontSize:34}}>🔒</div>
+    <div className="fr" style={{fontSize:20,margin:"8px 0 16px"}}>Lakshmi</div>
+    <input type="password" inputMode="numeric" placeholder="PIN" value={v} onChange={e=>setV(e.target.value)}
+      style={{width:150,textAlign:"center",fontSize:20,letterSpacing:6}}/>
+  </div>;
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
-</script>
-<script>
+/* ───────── shell ───────── */
+function App(){
+  const [data,setData]=useState(loadData);
+  const persist=d=>{ setData(d); saveData(d); };
+  const [tab,setTab]=useState("home");
+  const [mk,setMk]=useState(thisMonth());
+  const [showSet,setShowSet]=useState(false);
+  const [locked,setLocked]=useState(!!loadData().settings.pin);
+  useEffect(()=>{ document.documentElement.dataset.theme=data.settings.theme||"dark"; },[data.settings.theme]);
+  if (locked) return <PinGate pin={data.settings.pin} onOk={()=>setLocked(false)}/>;
+  return <>
+    <div className="hdr">
+      <div className="row" style={{gap:9}}>
+        <span style={{width:22,height:22,background:"var(--amber)",display:"inline-block",
+          clipPath:"polygon(50% 0,100% 50%,50% 100%,0 50%)"}}/>
+        <span className="fr" style={{fontSize:18,fontWeight:600}}>Lakshmi</span>
+      </div>
+      <button className="pill" onClick={()=>setShowSet(true)}>⚙️ Settings</button>
+    </div>
+    {tab==="home" && <Home data={data} persist={persist} mk={mk} openSettings={()=>setShowSet(true)}/>}
+    {tab==="money" && <Money data={data} persist={persist} mk={mk}/>}
+    {tab==="add" && <Add data={data} persist={persist} done={()=>setTab("home")}/>}
+    {tab==="cal" && <CalendarScr data={data} persist={persist} mk={mk} setMk={setMk}/>}
+    {tab==="fuel" && <Fuel data={data} mk={mk}/>}
+    <div className="nav">
+      <button className={tab==="home"?"on":""} onClick={()=>{setTab("home");haptic();}}><span style={{fontSize:18}}>◈</span>Home</button>
+      <button className={tab==="money"?"on":""} onClick={()=>{setTab("money");haptic();}}><span style={{fontSize:18}}>⛁</span>Money</button>
+      <button onClick={()=>{setTab("add");haptic(12);}}><span className="fab">+</span></button>
+      <button className={tab==="cal"?"on":""} onClick={()=>{setTab("cal");haptic();}}><span style={{fontSize:18}}>▦</span>Calendar</button>
+      <button className={tab==="fuel"?"on":""} onClick={()=>{setTab("fuel");haptic();}}><span style={{fontSize:18}}>⛽</span>Fuel</button>
+    </div>
+    {showSet && <Settings data={data} persist={persist} onClose={()=>setShowSet(false)}/>}
+  </>;
+}
+ReactDOM.createRoot(document.getElementById("app")).render(<App/>);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
 </script>
 </body>
