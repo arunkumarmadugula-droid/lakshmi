@@ -3,6 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lakshmi</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" type="image/png" href="./icon-180.png">
+<link rel="apple-touch-icon" href="./icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Lakshmi">
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  });
+}
+</script>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -54,8 +68,29 @@ input,select,textarea,button{font-family:inherit;}
           </svg>
           <span style="font-family:'Fraunces',Georgia,serif;font-size:19px;font-weight:600;letter-spacing:-.01em;">Lakshmi</span>
         </div>
-        <button onClick="{{ openSettings }}" style="width:34px;height:34px;border-radius:50%;border:1px solid #2C2C20;background:#1B1B13;color:#9A927D;font-size:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;">⚙</button>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="display:flex;align-items:center;gap:1px;background:#1B1B13;border:1px solid #2C2C20;border-radius:999px;padding:2px;">
+            <button onClick="{{ prevMonth }}" style="width:27px;height:27px;border-radius:50%;border:none;background:transparent;color:#9A927D;font-size:15px;cursor:pointer;">‹</button>
+            <button onClick="{{ toggleMonthMenu }}" style="border:none;background:transparent;color:#E8E2CF;cursor:pointer;font-family:'Fraunces',Georgia,serif;font-size:13.5px;padding:2px 3px;min-width:92px;">{{ monthLabelText }} ▾</button>
+            <button onClick="{{ nextMonth }}" style="width:27px;height:27px;border-radius:50%;border:none;background:transparent;color:#9A927D;font-size:15px;cursor:pointer;">›</button>
+          </div>
+          <button onClick="{{ openSettings }}" style="width:34px;height:34px;border-radius:50%;border:1px solid #2C2C20;background:#1B1B13;color:#9A927D;font-size:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;">⚙</button>
+        </div>
       </div>
+
+      <sc-if value="{{ monthMenuOpen }}" hint-placeholder-val="{{ false }}">
+        <div onClick="{{ toggleMonthMenu }}" style="position:fixed;inset:0;background:rgba(8,8,5,.55);z-index:60;"></div>
+        <div style="position:fixed;top:62px;left:50%;transform:translateX(-50%);width:min(420px,calc(100vw - 26px));max-height:68vh;overflow:auto;background:#14140D;border:1px solid #2C2C20;border-radius:18px;padding:14px;z-index:61;box-shadow:0 24px 60px rgba(0,0,0,.5);">
+          <div style="font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#8B8368;font-weight:600;margin-bottom:6px;">All months</div>
+          <div style="font-size:12px;color:#B7AF97;padding:4px 2px 10px;border-bottom:1px solid #232318;margin-bottom:6px;">{{ allTimeSummary }}</div>
+          <sc-for list="{{ monthMenuRows }}" as="mm" hint-placeholder-count="6">
+            <div onClick="{{ mm.onClick }}" style="display:flex;justify-content:space-between;align-items:center;padding:10px 8px;border-radius:10px;cursor:pointer;background:{{ mm.bg }};">
+              <span style="font-size:13.5px;color:{{ mm.fg }};">{{ mm.label }}</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#8B8368;">{{ mm.spendFmt }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
 
       <sc-if value="{{ locked }}" hint-placeholder-val="{{ false }}">
         <div style="min-height:72vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px;text-align:center;">
@@ -75,10 +110,15 @@ input,select,textarea,button{font-family:inherit;}
 
           <sc-if value="{{ tabHome }}" hint-placeholder-val="{{ true }}">
 
-            <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:14px;">
-              <button onClick="{{ prevMonth }}" style="width:30px;height:30px;border-radius:50%;border:1px solid #2C2C20;background:#1B1B13;color:#9A927D;cursor:pointer;">‹</button>
-              <span style="font-family:'Fraunces',Georgia,serif;font-size:15.5px;color:#C9C2AC;min-width:150px;text-align:center;">{{ monthLabelText }}</span>
-              <button onClick="{{ nextMonth }}" style="width:30px;height:30px;border-radius:50%;border:1px solid #2C2C20;background:#1B1B13;color:#9A927D;cursor:pointer;">›</button>
+            <div style="background:#1B1B13;border:1px solid #26261B;border-radius:18px;padding:14px 16px 12px;margin-bottom:14px;">
+              <div style="display:flex;text-align:center;">
+                <div style="flex:1;"><div style="font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:#8B8368;font-weight:600;">In</div><div style="font-family:'IBM Plex Mono',monospace;font-size:16px;color:#9FCB86;margin-top:2px;">{{ flowInFmt }}</div></div>
+                <div style="width:1px;background:#232318;"></div>
+                <div style="flex:1;"><div style="font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:#8B8368;font-weight:600;">Out</div><div style="font-family:'IBM Plex Mono',monospace;font-size:16px;color:#E8E2CF;margin-top:2px;">{{ flowOutFmt }}</div><div style="font-size:10px;color:#6B6552;margin-top:1px;">{{ flowBudgetLabel }}</div></div>
+                <div style="width:1px;background:#232318;"></div>
+                <div style="flex:1;"><div style="font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;color:#8B8368;font-weight:600;">{{ flowSaveWord }}</div><div style="font-family:'IBM Plex Mono',monospace;font-size:16px;color:{{ flowSaveColor }};margin-top:2px;">{{ flowSaveSign }}{{ flowSaveFmt }}</div><div style="font-size:10px;color:#6B6552;margin-top:1px;">{{ flowRateLabel }}</div></div>
+              </div>
+              <div style="height:5px;border-radius:99px;background:#242519;margin-top:11px;overflow:hidden;"><div style="height:100%;width:{{ flowBarPct }}%;background:{{ flowBarColor }};border-radius:99px;transition:width .6s cubic-bezier(.22,1,.36,1);"></div></div>
             </div>
 
             <div style="background:linear-gradient(160deg,#1E1F16 0%,#17170F 100%);border:1px solid #2C2C20;border-radius:22px;padding:22px;display:flex;align-items:center;gap:18px;margin-bottom:14px;box-shadow:0 12px 32px rgba(0,0,0,.35);">
@@ -136,6 +176,28 @@ input,select,textarea,button{font-family:inherit;}
                 </sc-for>
               </div>
             </sc-if>
+
+            <sc-if value="{{ hasInsights }}" hint-placeholder-val="{{ false }}">
+              <div style="background:linear-gradient(160deg,#1E1F16 0%,#17170F 100%);border:1px solid #2C2C20;border-radius:20px;padding:18px 20px;margin-bottom:14px;box-shadow:0 12px 32px rgba(0,0,0,.35);">
+                <div style="font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;color:#8B8368;font-weight:600;margin-bottom:10px;">✦ Insights</div>
+                <sc-for list="{{ insightRows }}" as="ir" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid #232318;">
+                    <span style="font-size:15px;margin-top:-1px;">{{ ir.ico }}</span>
+                    <span style="font-size:13px;color:#D8D2BF;flex:1;line-height:1.55;">{{ ir.msg }}</span>
+                    <span style="width:7px;height:7px;border-radius:50%;background:{{ ir.dot }};margin-top:6px;flex-shrink:0;"></span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+
+            <div style="background:#1B1B13;border:1px solid #26261B;border-radius:20px;padding:18px 20px;margin-bottom:14px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                <span style="font-size:11.5px;letter-spacing:.07em;text-transform:uppercase;color:#8B8368;font-weight:600;">In vs out — 6 months</span>
+                <span style="font-size:10.5px;color:#6B6552;"><span style="color:#7FB069;">▮</span> in&nbsp;&nbsp;<span style="color:#E0653A;">▮</span> out</span>
+              </div>
+              <div>{{ incSpendChart }}</div>
+              <div style="font-size:11px;color:#6B6552;margin-top:2px;">Green above red = a month that grew your savings.</div>
+            </div>
 
             <div style="background:#1B1B13;border:1px solid #26261B;border-radius:20px;padding:18px 20px;margin-bottom:14px;">
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
@@ -365,6 +427,27 @@ input,select,textarea,button{font-family:inherit;}
               </div>
             </sc-if>
 
+            <sc-if value="{{ segLedger }}" hint-placeholder-val="{{ false }}">
+              <input value="{{ ledgerQ }}" onChange="{{ onLedgerQ }}" placeholder="Search store, item or category…" style="width:100%;padding:11px 14px;border-radius:13px;border:1px solid #2C2C20;background:#1B1B13;color:#F3EEDF;font-size:13.5px;margin-bottom:8px;">
+              <div style="font-size:11.5px;color:#8B8368;margin:0 4px 10px;">{{ ledgerSummary }}</div>
+              <sc-if value="{{ noLedgerRows }}" hint-placeholder-val="{{ false }}"><div style="font-size:13px;color:#6B6552;padding:16px 4px;">Nothing in this month's ledger yet — scan a bill or add an expense with the + button.</div></sc-if>
+              <div style="background:#1B1B13;border:1px solid #26261B;border-radius:16px;padding:2px 14px;">
+                <sc-for list="{{ ledgerRows }}" as="lr" hint-placeholder-count="6">
+                  <div style="padding:10px 0;border-bottom:1px solid #232318;">
+                    <div onClick="{{ lr.onOpen }}" style="display:flex;align-items:center;gap:11px;cursor:pointer;">
+                      <span style="font-size:16px;">{{ lr.ico }}</span>
+                      <span style="flex:1;min-width:0;"><div style="font-size:13.5px;color:#E8E2CF;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ lr.name }}</div><div style="font-size:11px;color:#8B8368;">{{ lr.sub }}</div></span>
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:{{ lr.amountColor }};">{{ lr.amountFmt }}</span>
+                    </div>
+                    <sc-if value="{{ lr.expanded }}" hint-placeholder-val="{{ false }}">
+                      <div style="margin:9px 0 3px 27px;font-size:11.5px;color:#B7AF97;line-height:1.7;">{{ lr.itemsText }}</div>
+                      <div style="text-align:right;margin-top:4px;"><button onClick="{{ lr.onDelete }}" style="background:none;border:1px solid #3A2A22;color:#E0653A;font-size:11px;border-radius:8px;padding:4px 11px;cursor:pointer;">Delete entry</button></div>
+                    </sc-if>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+
             <sc-if value="{{ segCards }}" hint-placeholder-val="{{ false }}">
               <sc-for list="{{ cardsList }}" as="c" hint-placeholder-count="2">
                 <div style="background:#1B1B13;border:1px solid #26261B;border-radius:20px;padding:18px 20px;margin-bottom:14px;">
@@ -492,6 +575,22 @@ input,select,textarea,button{font-family:inherit;}
                 </sc-for>
               </div>
             </sc-if>
+            <sc-if value="{{ hasVendRank }}" hint-placeholder-val="{{ false }}">
+              <div style="background:linear-gradient(160deg,#1E1F16 0%,#17170F 100%);border:1px solid #2C2C20;border-radius:18px;padding:16px 18px;margin-top:14px;box-shadow:0 12px 32px rgba(0,0,0,.35);">
+                <div style="font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:#8B8368;font-weight:600;margin-bottom:4px;">Where to fill</div>
+                <div style="font-size:13px;color:#C9C2AC;line-height:1.5;margin-bottom:8px;">{{ bestVendorMsg }}</div>
+                <sc-for list="{{ vendRankRows }}" as="vv" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #232318;">
+                    <span style="flex:1;font-size:13px;color:{{ vv.color }};">{{ vv.name }} <span style="font-size:10.5px;color:#6B6552;">{{ vv.nLabel }}</span></span>
+                    <span style="font-size:11px;color:#8B8368;">{{ vv.mileageLabel }}</span>
+                    <span style="font-size:11px;color:#8B8368;">{{ vv.pplLabel }}</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:{{ vv.color }};">{{ vv.per100Label }}</span>
+                  </div>
+                </sc-for>
+                <div style="font-size:10.5px;color:#6B6552;margin-top:8px;line-height:1.5;">Ranked by real cost per 100 km — your measured mileage on each station's fuel × their price. Needs 2+ full-tank legs per station.</div>
+              </div>
+            </sc-if>
+
             <sc-if value="{{ noFuelData }}" hint-placeholder-val="{{ false }}"><div style="font-size:13px;color:#6B6552;margin-top:10px;">No fuel logged yet — use the + button to scan or log a fuel purchase.</div></sc-if>
           </sc-if>
         </div>
@@ -557,7 +656,8 @@ input,select,textarea,button{font-family:inherit;}
                 <sc-for list="{{ draftItems }}" as="it" hint-placeholder-count="3">
                   <div style="display:flex;align-items:center;gap:6px;padding:3px 0;">
                     <input value="{{ it.name }}" onChange="{{ it.onNameChange }}" style="flex:1;background:transparent;border:none;border-bottom:1px dotted #C9BE9A;font-family:inherit;font-size:11.5px;color:inherit;padding:2px 0;">
-                    <input value="{{ it.amount }}" onChange="{{ it.onAmountChange }}" inputmode="decimal" style="width:62px;text-align:right;background:transparent;border:none;border-bottom:1px dotted #C9BE9A;font-family:inherit;font-size:11.5px;color:inherit;padding:2px 0;">
+                    <input value="{{ it.qty }}" onChange="{{ it.onQtyChange }}" inputmode="numeric" title="Qty" style="width:26px;text-align:center;background:transparent;border:none;border-bottom:1px dotted #C9BE9A;font-family:inherit;font-size:11.5px;color:#8A7A55;padding:2px 0;">
+                    <input value="{{ it.amount }}" onChange="{{ it.onAmountChange }}" inputmode="decimal" style="width:58px;text-align:right;background:transparent;border:none;border-bottom:1px dotted #C9BE9A;font-family:inherit;font-size:11.5px;color:inherit;padding:2px 0;">
                     <button onClick="{{ it.onDelete }}" style="background:none;border:none;color:#B08A5A;font-size:12px;cursor:pointer;padding:0 2px;">✕</button>
                   </div>
                 </sc-for>
@@ -694,7 +794,7 @@ input,select,textarea,button{font-family:inherit;}
               <div><div style="font-size:11px;color:#6B6552;margin-bottom:4px;">INR rate (₹/CAD)</div><input inputmode="decimal" value="{{ setInrRate }}" onChange="{{ onSetInrRate }}" style="width:100%;padding:9px 10px;border-radius:10px;border:1px solid #2C2C20;background:#242519;color:#F3EEDF;"></div>
               <div><div style="font-size:11px;color:#6B6552;margin-bottom:4px;">India ₹/mo</div><input inputmode="decimal" value="{{ setIndiaMonthly }}" onChange="{{ onSetIndiaMonthly }}" style="width:100%;padding:9px 10px;border-radius:10px;border:1px solid #2C2C20;background:#242519;color:#F3EEDF;"></div>
               <div><div style="font-size:11px;color:#6B6552;margin-bottom:4px;">Savings goal / mo</div><input inputmode="decimal" value="{{ setSavingsGoal }}" onChange="{{ onSetSavingsGoal }}" style="width:100%;padding:9px 10px;border-radius:10px;border:1px solid #2C2C20;background:#242519;color:#F3EEDF;"></div>
-              <div><div style="font-size:11px;color:#6B6552;margin-bottom:4px;">App PIN (blank = off)</div><input inputmode="numeric" value="{{ setPin }}" onChange="{{ onSetPin }}" style="width:100%;padding:9px 10px;border-radius:10px;border:1px solid #2C2C20;background:#242519;color:#F3EEDF;"></div>
+              <div><div style="font-size:11px;color:#6B6552;margin-bottom:4px;">App PIN (stored hashed · blank = off)</div><input inputmode="numeric" value="{{ pinDraft }}" onChange="{{ onSetPin }}" placeholder="{{ pinPlaceholder }}" style="width:100%;padding:9px 10px;border-radius:10px;border:1px solid #2C2C20;background:#242519;color:#F3EEDF;"></div>
             </div>
 
             <div style="font-size:11px;color:#6B6552;margin-bottom:6px;">Your data, your hands · stays on this device only</div>
@@ -703,6 +803,24 @@ input,select,textarea,button{font-family:inherit;}
               <button onClick="{{ exportJSON }}" style="padding:10px;border-radius:10px;border:1px solid #2C2C20;background:#242519;color:#D8D2BF;font-size:12px;font-weight:600;cursor:pointer;">Backup</button>
               <button onClick="{{ triggerImport }}" style="padding:10px;border-radius:10px;border:1px solid #2C2C20;background:#242519;color:#D8D2BF;font-size:12px;font-weight:600;cursor:pointer;">Restore</button>
             </div>
+            <div style="margin:2px 0 16px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                <span style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8B8368;font-weight:600;">Device snapshots</span>
+                <button onClick="{{ backupNowClick }}" style="padding:7px 12px;border-radius:9px;border:1px solid #2C2C20;background:#242519;color:#D8D2BF;font-size:11.5px;font-weight:600;cursor:pointer;">Back up now</button>
+              </div>
+              <sc-if value="{{ hasBackups }}" hint-placeholder-val="{{ false }}">
+                <sc-for list="{{ backupRows }}" as="bk" hint-placeholder-count="3">
+                  <div style="display:flex;align-items:center;gap:8px;padding:7px 2px;border-bottom:1px solid #232318;">
+                    <span style="flex:1;font-size:12.5px;color:#C9C2AC;">{{ bk.label }}</span>
+                    <span style="font-size:11px;color:#6B6552;">{{ bk.sizeLabel }}</span>
+                    <button onClick="{{ bk.onRestore }}" style="padding:5px 11px;border-radius:8px;border:1px solid #2C2C20;background:none;color:#9FCB86;font-size:11px;font-weight:600;cursor:pointer;">Restore</button>
+                  </div>
+                </sc-for>
+              </sc-if>
+              <sc-if value="{{ noBackups }}" hint-placeholder-val="{{ false }}"><div style="font-size:12px;color:#6B6552;padding:4px 2px;">No snapshots yet — one is taken automatically each day you open the app.</div></sc-if>
+              <div style="font-size:10.5px;color:#6B6552;margin-top:8px;line-height:1.5;">Snapshots live on this device only (last 5 kept). {{ lastExportLabel }}</div>
+            </div>
+
             <button onClick="{{ eraseAll }}" style="width:100%;padding:11px;border-radius:10px;border:1px solid #E0653A;background:none;color:#E88A65;font-size:13px;font-weight:600;cursor:pointer;">Erase all data</button>
           </div>
         </sc-if>
@@ -767,6 +885,13 @@ input,select,textarea,button{font-family:inherit;}
             <div style="width:38px;height:4px;border-radius:99px;background:#34342A;margin:0 auto 14px;"></div>
             <div style="font-family:'Fraunces',Georgia,serif;font-size:17px;font-weight:600;margin-bottom:10px;">{{ drillTitle }}</div>
             <div>{{ drillChart }}</div>
+            <sc-if value="{{ hasDrillInsights }}" hint-placeholder-val="{{ false }}">
+              <div style="background:#1B1B13;border:1px solid #26261B;border-radius:14px;padding:10px 14px;margin:10px 0 4px;">
+                <sc-for list="{{ drillInsightRows }}" as="di" hint-placeholder-count="3">
+                  <div style="font-size:12.5px;color:#C9C2AC;padding:5px 0;line-height:1.55;">✦ {{ di.t }}</div>
+                </sc-for>
+              </div>
+            </sc-if>
 
             <div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8B8368;font-weight:600;margin:14px 0 8px;">Subscriptions / recurring in this category</div>
             <sc-if value="{{ noDrillRecurring }}" hint-placeholder-val="{{ false }}"><div style="font-size:12.5px;color:#6B6552;margin-bottom:8px;">None yet — add one below.</div></sc-if>
@@ -904,6 +1029,7 @@ input,select,textarea,button{font-family:inherit;}
 class Component extends DCLogic {
   state = {
     ready:false, data:null, tab:'home', moneySeg:'income', mk:'', rcReady:false,
+    ledgerQ:'', expandedExp:null, pinDraft:'', backups:[], monthMenuOpen:false,
     locked:false, pinInput:'', pinError:false, showSettings:false,
     addOpen:false, addStage:'choose', addBusy:'', addErr:'', draft:null, catPickerOpen:false,
     editIncome:null, payslipBusy:false, payslipErr:'', pendingPayslip:null, pendingName:'',
@@ -937,10 +1063,18 @@ class Component extends DCLogic {
   async boot(){
     const eng = await import('./lakshmi-engine.js');
     this.eng = eng;
-    const data = eng.loadData();
+    try{ if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
+    let data = eng.loadData();
+    if (data.settings && data.settings.pin && !data.settings.pinHash){
+      try{ const ph = await eng.hashPin(data.settings.pin);
+        data = { ...data, settings:{ ...data.settings, pin:'', pinHash:ph } };
+        eng.saveData(data); }catch(e){}
+    }
+    eng.autoBackup(data);
     const mk = eng.thisMonth();
     const startTab = this.props.startTab || 'home';
-    this.setState({ data, mk, locked: !!(data.settings && data.settings.pin), tab: startTab, calSel: eng.todayISO(), ready:true });
+    this.setState({ data, mk, locked: !!(data.settings && (data.settings.pinHash || data.settings.pin)),
+      tab: startTab, calSel: eng.todayISO(), backups: eng.listBackups(), ready:true });
   }
 
   persist(newData){ this.setState({ data:newData }); this.eng.saveData(newData); }
@@ -1048,9 +1182,13 @@ class Component extends DCLogic {
   closeSettings = () => this.setState({ showSettings:false });
   prevMonth = () => this.setState(s => ({ mk: this.eng.addMonths(s.mk,-1) }));
   nextMonth = () => this.setState(s => ({ mk: this.eng.addMonths(s.mk,1) }));
-  onPinInput = (e) => {
-    const v = e.target.value; const pin = this.state.data.settings.pin;
-    if (v === pin) this.setState({ locked:false, pinInput:'', pinError:false });
+  onPinInput = async (e) => {
+    const v = e.target.value, st = this.state.data.settings, eng = this.eng;
+    if (st.pinHash){
+      const h = v.length >= 4 ? await eng.hashPin(v) : '';
+      if (h && h === st.pinHash) this.setState({ locked:false, pinInput:'', pinError:false });
+      else this.setState({ pinInput:v, pinError: v.length >= 6 });
+    } else if (v === st.pin) this.setState({ locked:false, pinInput:'', pinError:false });
     else this.setState({ pinInput:v, pinError:false });
   };
 
@@ -1069,6 +1207,24 @@ class Component extends DCLogic {
   triggerLib = () => this.libRef.current && this.libRef.current.click();
   addBack = () => this.setState({ addStage:'choose', draft:null, addErr:'' });
   updDraft = (k,v) => this.setState(s => ({ draft:{...s.draft, [k]:v} }));
+
+  /* ── month menu / ledger / device backups ── */
+  toggleMonthMenu = () => this.setState(s => ({ monthMenuOpen: !s.monthMenuOpen }));
+  pickMonth = (m) => this.setState({ mk: m, monthMenuOpen:false });
+  onLedgerQ = (e) => this.setState({ ledgerQ: e.target.value });
+  toggleExpand = (id) => this.setState(s => ({ expandedExp: s.expandedExp===id ? null : id }));
+  delExpense = (id) => { if (!confirm('Delete this entry?')) return;
+    const data = this.state.data;
+    this.persist({ ...data, expenses: data.expenses.filter(e => e.id!==id) }); };
+  backupNowClick = () => { try{ this.eng.backupNow(this.state.data); this.setState({ backups: this.eng.listBackups() }); }
+    catch(e){ alert('Backup failed: ' + (e.message||e)); } };
+  restoreBak = (key) => { const eng = this.eng;
+    if (!confirm('Restore this snapshot? The current data is safety-backed-up first, then replaced.')) return;
+    try{ eng.backupNow(this.state.data);
+      const d = eng.restoreBackup(key);
+      if (!d) return alert('Could not read that backup');
+      this.persist(d); this.setState({ backups: eng.listBackups() }); }
+    catch(e){ alert('Restore failed: ' + (e.message||e)); } };
 
   blankExpenseDraft(){
     const data=this.state.data, eng=this.eng;
@@ -1095,7 +1251,7 @@ class Component extends DCLogic {
         this.setState({ addBusy:'', draft:{ kind:'fuel', vendor:j.store||'', date:j.date, cost:j.total||0, litres:j.litres||0, odometer:'', fullTank:true, fuelType:j.fuelType||'Regular' }, addStage:'confirmFuel' });
       } else {
         const base = this.blankExpenseDraft();
-        const items = (j.items||[]).map(it => ({ name: it.name||'Item', amount: it.lineTotal||0 }));
+        const items = (j.items||[]).map(it => ({ name: it.name||'Item', qty: +it.qty||1, amount: it.lineTotal||0 }));
         this.setState({ addBusy:'', draft:{ ...base, store:j.store||'', date:j.date, category:j.category, subtotal:j.subtotal||0, tax:j.tax||0, total:j.total||0, items }, addStage:'confirmExpense' });
       }
     }catch(err){ this.setState({ addBusy:'', addErr: err.message || 'Could not read that image' }); }
@@ -1121,8 +1277,9 @@ class Component extends DCLogic {
 
   itemNameChange = (i,e) => this.setState(s => { const items=[...s.draft.items]; items[i]={...items[i], name:e.target.value}; return { draft:{...s.draft, items} }; });
   itemAmountChange = (i,e) => this.setState(s => { const items=[...s.draft.items]; items[i]={...items[i], amount:e.target.value}; return { draft:{...s.draft, items} }; });
+  itemQtyChange = (i,e) => this.setState(s => { const items=[...s.draft.items]; items[i]={...items[i], qty:e.target.value}; return { draft:{...s.draft, items} }; });
   itemDelete = (i) => this.setState(s => { const items=s.draft.items.filter((_,idx)=>idx!==i); return { draft:{...s.draft, items} }; });
-  addItemLine = () => this.setState(s => ({ draft:{...s.draft, items:[...(s.draft.items||[]), {name:'', amount:0}]} }));
+  addItemLine = () => this.setState(s => ({ draft:{...s.draft, items:[...(s.draft.items||[]), {name:'', qty:1, amount:0}]} }));
 
   runSaveAnim(total, categoryLabel){
     this.setState({ saveAnim:{ total, category:categoryLabel }, filing:false });
@@ -1134,7 +1291,7 @@ class Component extends DCLogic {
     const { data } = this.state, f = this.state.draft, eng = this.eng;
     const rate = +data.settings.inrRate || 1;
     const cad = f.currency==='INR' ? (+f.total||0)/rate : +f.total||0;
-    const items = (f.items||[]).map(it => ({ name: it.name, lineTotal: +it.amount||0 }));
+    const items = (f.items||[]).map(it => ({ name: it.name, qty: Math.max(1, +it.qty||1), lineTotal: +it.amount||0 }));
     const exp = { id: eng.uid(), store: f.store||'Expense', date: f.date, category: f.category,
       subtotal: +f.subtotal||cad, tax: +f.tax||0, total: cad, items,
       paySource: f.paySource, cardId: f.paySource==='card'?f.cardId:'', notes: f.notes,
@@ -1323,7 +1480,13 @@ class Component extends DCLogic {
   onSetInrRate = (e) => { const data=this.state.data; this.persist({...data, settings:{...data.settings, inrRate:e.target.value}}); };
   onSetIndiaMonthly = (e) => { const data=this.state.data; this.persist({...data, settings:{...data.settings, indiaMonthlyINR:e.target.value}}); };
   onSetSavingsGoal = (e) => { const data=this.state.data; this.persist({...data, settings:{...data.settings, savingsGoal:e.target.value}}); };
-  onSetPin = (e) => { const data=this.state.data; this.persist({...data, settings:{...data.settings, pin:e.target.value}}); };
+  onSetPin = async (e) => {
+    const v = e.target.value;
+    this.setState({ pinDraft: v });
+    if (!v){ const d=this.state.data; return this.persist({ ...d, settings:{ ...d.settings, pin:'', pinHash:'' } }); }
+    if (v.length >= 4){ const ph = await this.eng.hashPin(v);
+      const d=this.state.data; this.persist({ ...d, settings:{ ...d.settings, pin:'', pinHash:ph } }); }
+  };
   onAiKeyChange = (e) => this.setState({ aiKeyDraft:e.target.value });
   saveAiKey = () => { this.eng.setAI({ provider:this.state.aiProvider, key:this.state.aiKeyDraft.trim() }); };
   setAiProvider = (p) => this.setState({ aiProvider:p });
@@ -1338,6 +1501,7 @@ class Component extends DCLogic {
     const data=this.state.data, eng=this.eng;
     const blob=new Blob([JSON.stringify(data,null,1)],{type:"application/json"});
     const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`lakshmi-backup-${eng.todayISO()}.json`; a.click();
+    eng.noteExport(); this.setState({});
   };
   triggerImport = () => this.importRef.current && this.importRef.current.click();
   importJSON = (e) => {
@@ -1500,13 +1664,14 @@ class Component extends DCLogic {
 
     /* ---------- moneySegs ---------- */
     const segBtn = (v,label) => ({ label, onClick:()=>this.setMoneySeg(v), bg: s.moneySeg===v?accent:'transparent', fg: s.moneySeg===v?accentInk:'#9A927D' });
-    const moneySegs = [segBtn('income','Income'), segBtn('budget','Budget'), segBtn('cards','Cards')];
+    const moneySegs = [segBtn('income','Income'), segBtn('budget','Budget'), segBtn('cards','Cards'), segBtn('ledger','Ledger')];
 
     /* ---------- ADD flow ---------- */
     const draft = s.draft || {};
     const draftItems = (draft.items||[]).map((it,i) => ({
-      name: it.name, amount: it.amount,
-      onNameChange: (e)=>this.itemNameChange(i,e), onAmountChange: (e)=>this.itemAmountChange(i,e), onDelete: ()=>this.itemDelete(i),
+      name: it.name, qty: it.qty==null?1:it.qty, amount: it.amount,
+      onNameChange: (e)=>this.itemNameChange(i,e), onQtyChange: (e)=>this.itemQtyChange(i,e),
+      onAmountChange: (e)=>this.itemAmountChange(i,e), onDelete: ()=>this.itemDelete(i),
     }));
     const catPickerOptions = CATS.map(c => ({
       icon: CAT_ICO[c], label:c, onClick: ()=>this.setCategory(c),
@@ -1551,7 +1716,7 @@ class Component extends DCLogic {
       hasFuelData: data.fuel.length>0, fuelAvgFillFmt: fmt0(fs.avgFill), fuelAvgLFmt: fmt(fs.avgL), fuelThisMoFmt: fmt0((fs.byM[mk]||{}).cost||0),
 
       /* MONEY shell */
-      moneySegs, segIncome: s.moneySeg==='income', segBudget: s.moneySeg==='budget', segCards: s.moneySeg==='cards',
+      moneySegs, segIncome: s.moneySeg==='income', segBudget: s.moneySeg==='budget', segCards: s.moneySeg==='cards', segLedger: s.moneySeg==='ledger',
 
       /* Income */
       hasPayslip: !!ps, noPayslip: !ps, payslipErr: s.payslipErr, payslipBusyBool: s.payslipBusy,
@@ -1742,6 +1907,89 @@ class Component extends DCLogic {
       fuelCostChart: RC_ready ? this.barsChart(eng.lastMonths(6).map(m=>({m:m.slice(5), cost:Math.round((fs.byM[m]||{}).cost||0)})), ['cost'], ['#E2A63D']) : null,
       hasMileageTrend: Object.keys(fs.mAvg||{}).length>1,
       mileageChart: RC_ready ? this.lineChartEl(eng.lastMonths(6).map(m=>({m:m.slice(5), v: fs.mAvg[m]?+fs.mAvg[m].toFixed(1):null})).filter(x=>x.v!=null), '#6FA8A0') : null,
+
+      /* ── V3: flow strip · insights · ledger · month menu · vendor rank · backups ── */
+      ...(() => {
+        const flowIn = eng.monthIncome(data, mk), flowOut = eng.totSpend(data, mk), flowSave = flowIn - flowOut;
+        const budTot = Object.values(data.budgets).reduce((a,b)=>a+(+b||0),0);
+        const outPct = flowIn>0 ? eng.clamp(100*flowOut/flowIn, 0, 100) : (flowOut>0 ? 100 : 0);
+        return {
+          flowInFmt: fmt0(flowIn), flowOutFmt: fmt0(flowOut), flowSaveFmt: fmt0(Math.abs(flowSave)),
+          flowSaveSign: flowSave<0 ? '−' : '', flowSaveColor: flowSave>=0 ? '#9FCB86' : '#E88A65',
+          flowSaveWord: flowSave>=0 ? 'Saved' : 'Over',
+          flowBarPct: Math.round(outPct), flowBarColor: outPct>92 ? '#E0653A' : outPct>75 ? '#E2A63D' : '#7FB069',
+          flowBudgetLabel: budTot>0 ? Math.round(100*flowOut/budTot)+'% of budget' : 'no budgets set',
+          flowRateLabel: flowIn>0 ? Math.round(100*Math.max(0,flowSave)/flowIn)+'% kept' : '',
+        };
+      })(),
+      ...(() => { const ins = eng.insights(data, mk);
+        return { hasInsights: ins.length>0, insightRows: ins.map(i => ({ ico:i.ico, msg:i.msg,
+          dot: i.tone==='bad' ? '#E0653A' : i.tone==='warn' ? '#E2A63D' : i.tone==='good' ? '#7FB069' : '#6FA8A0' })) }; })(),
+      incSpendChart: RC_ready ? this.barsChart(eng.incomeVsSpendSeries(data,6), ['inc','spend'], ['#7FB069','#E0653A'], 120) : null,
+      ...(() => {
+        const q = (s.ledgerQ||'').toLowerCase();
+        const rows = data.expenses.filter(e => eng.ym(e.date)===mk)
+          .filter(e => !q || (e.store||'').toLowerCase().includes(q) || (e.category||'').toLowerCase().includes(q)
+            || (e.items||[]).some(it => (it.name||'').toLowerCase().includes(q)))
+          .sort((a,b)=>a.date<b.date?1:-1);
+        const tot = rows.filter(e=>!eng.isSettled(e)).reduce((a,e)=>a+(+e.total||0),0);
+        return {
+          ledgerQ: s.ledgerQ, onLedgerQ: this.onLedgerQ,
+          noLedgerRows: rows.length===0,
+          ledgerSummary: rows.length+' entr'+(rows.length===1?'y':'ies')+' · '+fmt0(tot)+' spend',
+          ledgerRows: rows.slice(0,150).map(e => ({
+            ico: eng.isSettled(e) ? '🧾' : (CAT_ICO[e.category]||'◇'),
+            name: e.store||e.category||'Expense',
+            sub: eng.shortDate(e.date)+' · '+(e.category||'')+(eng.isSettled(e)?' · settlement':(e.paySource==='card'?' · card':'')),
+            amountFmt: fmt0(e.total),
+            amountColor: eng.isSettled(e) ? '#8B8368' : '#E8E2CF',
+            expanded: s.expandedExp===e.id,
+            itemsText: (e.items&&e.items.length) ? e.items.map(it => ((+it.qty||1)>1 ? (+it.qty)+'× ' : '')+(it.name||'item')+'  '+fmt0(it.lineTotal)).join('  ·  ') : 'No line items on this entry',
+            onOpen: ()=>this.toggleExpand(e.id),
+            onDelete: ()=>this.delExpense(e.id),
+          })),
+        };
+      })(),
+      ...(() => { const vr = fs.vendRank||[];
+        return { hasVendRank: vr.length>=2,
+          vendRankRows: vr.slice(0,4).map((v,i) => ({
+            name: (i===0?'★ ':'')+v.vendor, nLabel: v.n+' legs',
+            mileageLabel: v.perAvg.toFixed(1)+' L/100km', pplLabel: '$'+v.ppl.toFixed(2)+'/L',
+            per100Label: fmt(v.costPer100)+'/100km', color: i===0 ? '#9FCB86' : '#C9C2AC' })),
+          bestVendorMsg: vr.length>=2 ? 'Fill at '+vr[0].vendor+' — cheapest per kilometre driven, on your own mileage data.' : '' }; })(),
+      monthMenuOpen: s.monthMenuOpen, toggleMonthMenu: this.toggleMonthMenu,
+      ...(() => { const at = eng.allTimeStats(data);
+        return {
+          allTimeSummary: at.months+' month'+(at.months===1?'':'s')+' tracked · '+fmt0(at.spend)+' spent · '+(at.saved>=0?fmt0(at.saved)+' net saved':fmt0(-at.saved)+' net over'),
+          monthMenuRows: eng.allMonthKeys(data).slice(0,24).map(m => ({
+            label: eng.monthLabel(m), spendFmt: fmt0(eng.totSpend(data,m)),
+            bg: m===mk ? '#242519' : 'transparent', fg: m===mk ? accent : '#D8D2BF',
+            onClick: ()=>this.pickMonth(m) })) }; })(),
+      pinDraft: s.pinDraft,
+      pinPlaceholder: (data.settings.pinHash||data.settings.pin) ? 'PIN set — type new to change, clear to remove' : 'Set a PIN (4+ digits)',
+      backupNowClick: this.backupNowClick,
+      hasBackups: (s.backups||[]).length>0, noBackups: (s.backups||[]).length===0,
+      backupRows: (s.backups||[]).map(b => ({ label:b.label, sizeLabel:b.sizeLabel, onRestore:()=>this.restoreBak(b.key) })),
+      lastExportLabel: eng.lastExportLabel(),
+      ...(() => { if(!s.drillCat) return { hasDrillInsights:false, drillInsightRows:[] };
+        const c=s.drillCat, out=[];
+        const cur=(eng.catSpend(data,mk)[c]||0);
+        const hist=eng.lastMonths(4).filter(m=>m!==mk).map(m=>eng.catSpend(data,m)[c]||0).filter(x=>x>0);
+        const avg=hist.length?hist.reduce((a,b)=>a+b,0)/hist.length:0;
+        if (avg>5) out.push({t: cur>avg ? 'Running '+fmt0(cur-avg)+' above your recent average of '+fmt0(avg)
+                                        : 'Running '+fmt0(avg-cur)+' below your recent average of '+fmt0(avg)+' — keep it up'});
+        const tot=eng.totSpend(data,mk); if (tot>0&&cur>0) out.push({t: Math.round(100*cur/tot)+'% of everything spent this month'});
+        const exp=eng.monthExp(data,mk).filter(e=>e.category===c);
+        const stores={}; exp.forEach(e=>{ const k=e.store||'—'; stores[k]=(stores[k]||0)+(+e.total||0); });
+        const topS=Object.entries(stores).sort((a,b)=>b[1]-a[1])[0];
+        if (topS && exp.length>1) out.push({t:'Most of it went to '+topS[0]+' ('+fmt0(topS[1])+')'});
+        const b=+data.budgets[c]||0;
+        if (b>0){ const dayN=mk===eng.thisMonth()?Math.max(1,+eng.todayISO().slice(8,10)):eng.dim(mk);
+          const fc=(mk===eng.thisMonth()&&dayN>=3)?(cur/dayN)*eng.dim(mk):cur;
+          out.push({t: fc>b ? 'On pace to finish at '+fmt0(fc)+' — '+fmt0(fc-b)+' over the '+fmt0(b)+' budget'
+                            : 'On pace to finish at '+fmt0(fc)+' of the '+fmt0(b)+' budget'}); }
+        return { hasDrillInsights: out.length>0, drillInsightRows: out };
+      })(),
       hasBestMonth: !!fs.best, bestMonthLabel: fs.best?`${fs.best[0].slice(5)} · ${fs.best[1].toFixed(1)}`:'',
       hasWorstMonth: !!fs.worst, worstMonthLabel: fs.worst?`${fs.worst[0].slice(5)} · ${fs.worst[1].toFixed(1)}`:'',
       hasVendors: Object.keys(fs.vend||{}).length>0,

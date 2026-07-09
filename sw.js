@@ -1,12 +1,13 @@
-const CACHE = "lakshmi-v4";
+const CACHE = "lakshmi-v6";
 const ASSETS = [
-  "./", "./index.html", "./manifest.json", "./icon-180.png", "./icon-512.png",
+  "./", "./index.html", "./support.js", "./lakshmi-engine.js",
+  "./manifest.json", "./icon-180.png", "./icon-512.png",
   "https://unpkg.com/react@18.3.1/umd/react.production.min.js",
   "https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js",
   "https://unpkg.com/prop-types@15.8.1/prop-types.min.js",
   "https://unpkg.com/recharts@2.12.7/umd/Recharts.js",
-  "https://unpkg.com/@babel/standalone@7.24.7/babel.min.js",
-  "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+  "https://unpkg.com/@babel/standalone@7.29.0/babel.min.js",
+  "https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
 ];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then(c => Promise.allSettled(ASSETS.map(a => c.add(a)))));

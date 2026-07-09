@@ -30,7 +30,8 @@ export function itemPriceComparisons(data, limit=5){
     e.items.forEach(it => {
       const norm = normItemName(it.name);
       if (!norm || norm.length<3) return;
-      const price = +it.lineTotal||0; if (price<=0) return;
+      const q = Math.max(1, +it.qty||1);
+      const price = (+it.lineTotal||0)/q; if (price<=0) return;
       byItem[norm] = byItem[norm] || { label: it.name, stores:{} };
       const st = byItem[norm].stores[e.store] = byItem[norm].stores[e.store] || { store:e.store, min:Infinity, max:0, count:0 };
       st.min = Math.min(st.min, price); st.max = Math.max(st.max, price); st.count++;
@@ -144,6 +145,9 @@ Amounts are for this single pay period. Combine taxes if not split.`;
 
 /* ───────── local analytics engine (zero AI tokens) ───────── */
 export const isSettled = e => e.kind === "settlement";
+/* cash-basis: card purchases leave cash only when the bill is settled; card expenses with no linked card count as cash */
+export const isCashOutflow = e => isSettled(e) || e.paySource !== "card" || !e.cardId;
+export const cashOutM = (data, mk) => data.expenses.filter(e => ym(e.date)===mk && isCashOutflow(e)).reduce((a,e)=>a+(+e.total||0),0);
 export const monthExp = (data, mk) => data.expenses.filter(e => ym(e.date)===mk && !isSettled(e));
 export const catSpend = (data, mk) => { const o={}; monthExp(data,mk).forEach(e => { o[e.category]=(o[e.category]||0)+(+e.total||0); }); return o; };
 export const totSpend = (data, mk) => monthExp(data,mk).reduce((a,e)=>a+(+e.total||0),0);
@@ -209,29 +213,51 @@ export function incomeEvents(data, mk){
   return out.sort((a,b)=>a.date<b.date?-1:1);
 }
 export const monthIncome = (data, mk) => incomeEvents(data,mk).reduce((a,e)=>a+e.amount,0);
-/* the balance checkpoint auto-grows: anchor + net savings (income-spend) of every completed month since it was set */
+/* the balance checkpoint auto-grows on a CASH basis: anchor + (income - cash outflows) of each month
+   since it was set. Card purchases don't reduce cash here — their settlement (bill payment) does,
+   which fixes the old double-count of card spend. Flows on/before the anchor date are already
+   inside the typed balance, so they're skipped. */
 export function rollingBalanceBase(data, mk){
   const anchor = +data.settings.cashOnHand||0;
-  const anchorMonth = ym(data.settings.cashOnHandDate || todayISO());
-  if (mk <= anchorMonth) return anchor;
-  let bal = anchor, m = anchorMonth;
-  while (m < mk){ bal += (monthIncome(data,m) - totSpend(data,m)); m = addMonths(m,1); }
+  const aISO = data.settings.cashOnHandDate || todayISO();
+  const aMk = ym(aISO);
+  if (mk <= aMk) return anchor;
+  let bal = anchor, m = aMk;
+  while (m < mk){
+    const after = d => m > aMk || d > aISO;
+    const inc = incomeEvents(data,m).filter(e => after(e.date)).reduce((a,e)=>a+e.amount,0);
+    const out = data.expenses.filter(e => ym(e.date)===m && isCashOutflow(e) && after(e.date)).reduce((a,e)=>a+(+e.total||0),0);
+    bal += inc - out; m = addMonths(m,1);
+  }
   return bal;
 }
 export function projection(data, mk){
   const days=dim(mk), today=todayISO(), start=rollingBalanceBase(data,mk);
-  const inflow={}, outflow={};
+  const aISO = data.settings.cashOnHandDate || "";
+  const anchorInMonth = ym(aISO)===mk ? aISO : "";
+  const inflow={}, schedOut={}, actualOut={};
   incomeEvents(data,mk).forEach(e => inflow[e.date]=(inflow[e.date]||0)+e.amount);
-  monthItems(data,mk).forEach(it => { if(it.status!=="skipped"&&it.status!=="paid") outflow[it.date]=(outflow[it.date]||0)+it.amount; });
+  monthItems(data,mk).forEach(it => {
+    if (it.status==="skipped"||it.status==="paid") return;
+    if (it.type==="rec" && it.paySource==="card") return;  /* exits cash via the card bill instead */
+    if (it.status==="missed") return;                      /* unpaid = cash hasn't left; alerts nag */
+    schedOut[it.date]=(schedOut[it.date]||0)+it.amount;
+  });
+  data.expenses.forEach(e => { if (ym(e.date)===mk && isCashOutflow(e)) actualOut[e.date]=(actualOut[e.date]||0)+(+e.total||0); });
   const spent=catSpend(data,mk); const fixedCats=new Set(data.recurring.map(r=>r.category));
   let varBudget=0; Object.entries(data.budgets).forEach(([c,b])=>{ if(!fixedCats.has(c)&&c!=="Rent") varBudget+=Math.max(0,(+b||0)-(spent[c]||0)); });
+  /* only the cash-paid share of future variable spending should drain projected cash */
+  const nonCard = monthExp(data,mk).filter(e=>e.paySource!=="card").reduce((a,e)=>a+(+e.total||0),0);
+  const allSp = totSpend(data,mk);
+  const cashRatio = allSp>40 ? clamp(nonCard/allSp,0,1) : 1;
   const dayN=Math.min(+today.slice(8,10), days), leftDays=Math.max(1,days-dayN);
-  const pace=varBudget/leftDays;
+  const pace=(varBudget/leftDays)*cashRatio;
   let bal=start, pts=[];
   for(let d=1; d<=days; d++){
     const iso=`${mk}-${pad(d)}`;
-    bal += (inflow[iso]||0) - (outflow[iso]||0);
-    if (iso>today) bal -= pace;
+    if (anchorInMonth && iso<=anchorInMonth){ pts.push({ d, iso, bal:Math.round(bal), future:false }); continue; }
+    if (iso<=today) bal += (inflow[iso]||0) - (actualOut[iso]||0);
+    else bal += (inflow[iso]||0) - (schedOut[iso]||0) - pace;
     pts.push({ d, iso, bal:Math.round(bal), future:iso>today });
   }
   return pts;
@@ -251,7 +277,9 @@ export function fuelStats(data){
   f.forEach(x=>{ if(!x.fullTank||!+x.odometer) return;
     if(lastFull&&+x.odometer>+lastFull.odometer){
       const km=+x.odometer-+lastFull.odometer, L=+x.litres||0;
-      if(km>0&&L>0) legs.push({date:x.date, km, L, per:100*L/km}); }
+      if(km>0&&L>0) legs.push({date:x.date, km, L, per:100*L/km,
+        vendor: lastFull.vendor||"Unknown",
+        ppl: +lastFull.litres>0 ? (+lastFull.cost||0)/(+lastFull.litres) : 0 }); }
     lastFull=x; });
   const byM={}; f.forEach(x=>{ const mk=ym(x.date); byM[mk]=byM[mk]||{cost:0,L:0,fills:0}; byM[mk].cost+=+x.cost||0; byM[mk].L+=+x.litres||0; byM[mk].fills++; });
   const kmByM={}; legs.forEach(l=>{ kmByM[ym(l.date)]=(kmByM[ym(l.date)]||0)+l.km; });
@@ -261,7 +289,14 @@ export function fuelStats(data){
   ms.forEach(([mk,v])=>{ if(!best||v<best[1])best=[mk,v]; if(!worst||v>worst[1])worst=[mk,v]; });
   const vend={}; f.forEach(x=>{ const v=x.vendor||"Unknown"; vend[v]=vend[v]||{n:0,cost:0}; vend[v].n++; vend[v].cost+=+x.cost||0; });
   const totL=f.reduce((a,x)=>a+(+x.litres||0),0), totC=f.reduce((a,x)=>a+(+x.cost||0),0);
-  return { legs, byM, kmByM, mAvg, best, worst, vend,
+  /* which station's fuel actually moves the car cheapest: avg L/100km on that fuel x its $/L */
+  const vp={}; legs.forEach(l=>{ if(!l.ppl) return; const v=l.vendor; vp[v]=vp[v]||{n:0,per:0,ppl:0};
+    vp[v].n++; vp[v].per+=l.per; vp[v].ppl+=l.ppl; });
+  const vendRank = Object.entries(vp).filter(([,x])=>x.n>=2)
+    .map(([vendor,x]) => { const perAvg=x.per/x.n, ppl=x.ppl/x.n;
+      return { vendor, n:x.n, perAvg, ppl, costPer100: perAvg*ppl }; })
+    .sort((a,b)=>a.costPer100-b.costPer100);
+  return { legs, byM, kmByM, mAvg, best, worst, vend, vendRank,
     avgFill: f.length?totC/f.length:0, avgL: totL?totC/totL:0 };
 }
 export const recvOut = r => Math.max(0, (+r.amount||0) - (r.repaid||[]).reduce((a,x)=>a+(+x.amount||0),0));
@@ -302,5 +337,115 @@ export function alerts(data, mk){
   if(owed>0) out.push({t:"warn", m:`Friends owe you ${fmt0(owed)}`});
   data.cards.forEach(c=>{ const prev=(c.bills||{})[addMonths(mk,-1)], cur=(c.bills||{})[mk]??+c.currentBill;
     if(prev>0&&cur>prev*1.25) out.push({t:"warn", m:`${c.name} bill up ${Math.round(100*(cur-prev)/prev)}% vs last month`}); });
+  if (data.expenses.length>10){ const t=lastExportTs();
+    if (!t || Date.now()-t > 30*864e5) out.push({t:"warn", m:"No backup file exported in 30+ days — Settings has a one-tap JSON export"});
+  }
   return out.slice(0,8);
+}
+
+
+/* ───────── PIN hashing (never store the PIN itself) ───────── */
+export async function hashPin(pin){
+  const enc = new TextEncoder().encode("lakshmi::"+pin);
+  if (typeof crypto!=="undefined" && crypto.subtle){
+    const buf = await crypto.subtle.digest("SHA-256", enc);
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+  }
+  let h=5381; for (const c of enc) h=((h*33)^c)>>>0;  /* non-crypto fallback for non-HTTPS contexts */
+  return "x-"+h.toString(16);
+}
+
+/* ───────── on-device backup snapshots + restore ───────── */
+export const BAK_PREFIX="lakshmi-bak-", BAK_KEEP=5, EXPORT_TS_KEY="lakshmi-last-export";
+export function listBackups(){
+  const out=[];
+  try{ for (let i=0;i<localStorage.length;i++){ const k=localStorage.key(i);
+    if (k && k.indexOf(BAK_PREFIX)===0){ const ts=+k.slice(BAK_PREFIX.length)||0; const raw=localStorage.getItem(k)||"";
+      out.push({ key:k, ts,
+        label: new Date(ts).toLocaleString("en-CA",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}),
+        sizeLabel: Math.max(1,Math.round(raw.length/1024))+" KB" }); } } }catch(e){}
+  return out.sort((a,b)=>b.ts-a.ts);
+}
+export function backupNow(data){
+  const ts=Date.now(), raw=JSON.stringify(data);
+  try{ localStorage.setItem(BAK_PREFIX+ts, raw); }
+  catch(e){ const baks=listBackups();                       /* quota: drop oldest, retry once */
+    if (baks.length){ localStorage.removeItem(baks[baks.length-1].key); localStorage.setItem(BAK_PREFIX+ts, raw); }
+    else throw e; }
+  listBackups().slice(BAK_KEEP).forEach(b => { try{ localStorage.removeItem(b.key); }catch(e){} });
+  return ts;
+}
+export function autoBackup(data){
+  try{ const baks=listBackups();
+    if (!baks.length || Date.now()-baks[0].ts > 20*3600e3) backupNow(data); }catch(e){}
+}
+export function restoreBackup(key){
+  try{ const raw=localStorage.getItem(key); if(!raw) return null;
+    const d=JSON.parse(raw); if(!d || !d.expenses) return null;
+    return { ...emptyData, ...d, settings:{...emptyData.settings, ...d.settings} }; }catch(e){ return null; }
+}
+export const noteExport = () => { try{ localStorage.setItem(EXPORT_TS_KEY, String(Date.now())); }catch(e){} };
+export const lastExportTs = () => { try{ return +(localStorage.getItem(EXPORT_TS_KEY)||0); }catch(e){ return 0; } };
+export const lastExportLabel = () => { const t=lastExportTs();
+  if(!t) return "No backup file exported yet — keep one off this device.";
+  const d=Math.floor((Date.now()-t)/864e5);
+  return d===0 ? "Last file export: today" : "Last file export: "+d+" day"+(d===1?"":"s")+" ago"; };
+
+/* ───────── dashboard series + insight engine (all local, zero AI tokens) ───────── */
+export const incomeVsSpendSeries = (data, n=6) =>
+  lastMonths(n).map(m => ({ m:m.slice(5), inc:Math.round(monthIncome(data,m)), spend:Math.round(totSpend(data,m)) }));
+
+export function allMonthKeys(data){
+  const s=new Set([thisMonth()]);
+  data.expenses.forEach(e => { const m=ym(e.date); if(m) s.add(m); });
+  data.fuel.forEach(x => { const m=ym(x.date); if(m) s.add(m); });
+  incomeEventsSafe(data).forEach(m => s.add(m));
+  return Array.from(s).filter(m=>/^\d{4}-\d{2}$/.test(m)).sort().reverse();
+}
+function incomeEventsSafe(data){
+  const out=[]; try{ data.incomes.forEach(i => { if(i.type==="one"&&i.date) out.push(ym(i.date)); }); }catch(e){}
+  return out;
+}
+export function allTimeStats(data){
+  const months = allMonthKeys(data).filter(m => totSpend(data,m)>0 || monthIncome(data,m)>0);
+  const spend = months.reduce((a,m)=>a+totSpend(data,m),0);
+  const inc = months.reduce((a,m)=>a+monthIncome(data,m),0);
+  return { months: months.length, spend, inc, saved: inc-spend,
+    avgSpend: months.length ? spend/months.length : 0 };
+}
+
+export function insights(data, mk){
+  const out=[];
+  const inc=monthIncome(data,mk), sp=totSpend(data,mk), kept=inc-sp;
+  if (inc>0){
+    const rate=kept/inc;
+    if (rate<0) out.push({ico:"🔻",tone:"bad",msg:"Spending is "+fmt0(-kept)+" above income this month — open the Ledger and find what can move."});
+    else if (rate>=0.2) out.push({ico:"🌱",tone:"good",msg:"You're keeping "+Math.round(100*rate)+"% of income ("+fmt0(kept)+") this month."});
+    else out.push({ico:"🎯",tone:"warn",msg:"Savings rate is "+Math.round(100*rate)+"% so far — every "+fmt0(100)+" trimmed lifts it "+(Math.round(10000/inc*10)/10)+" pts."});
+  }
+  const cur=catSpend(data,mk), hist={};
+  lastMonths(4).forEach(m => { if(m===mk) return; Object.entries(catSpend(data,m)).forEach(([c,v]) => hist[c]=(hist[c]||0)+v); });
+  let gCat=null, gAmt=0;
+  Object.entries(cur).forEach(([c,v]) => { const avg=(hist[c]||0)/3;
+    if (avg>20 && v>avg*1.3 && v-avg>gAmt){ gCat=c; gAmt=v-avg; } });
+  if (gCat) out.push({ico:CAT_ICO[gCat]||"📈",tone:"warn",msg:gCat+" is running "+fmt0(gAmt)+" above your 3-month average — tap it below to see why."});
+  const subs=data.recurring.filter(r=>r.category==="Subscriptions");
+  const subMo=subs.reduce((a,r)=>a+(r.freq==="monthly"?+r.amount:r.freq==="annual"?(+r.amount)/12:r.freq==="weekly"?(+r.amount)*4.33:r.freq==="biweekly"?(+r.amount)*2.17:+r.amount||0),0);
+  if (subMo>15) out.push({ico:"🔁",tone:"info",msg:subs.length+" subscription"+(subs.length>1?"s":"")+" = "+fmt0(subMo)+"/mo — that's "+fmt0(subMo*12)+" a year. Worth a cull?"});
+  const cmp=itemPriceComparisons(data,1);
+  if (cmp.length && cmp[0].savings>=0.5) out.push({ico:"🛒",tone:"good",msg:"Buy "+cmp[0].label+" at "+cmp[0].cheapest.store+" instead of "+cmp[0].priciest.store+" — save "+fmt(cmp[0].savings)+" each time."});
+  const fs=fuelStats(data);
+  if ((fs.vendRank||[]).length>=2){ const b=fs.vendRank[0], w=fs.vendRank[fs.vendRank.length-1];
+    out.push({ico:"⛽",tone:"good",msg:"Your car runs cheapest on "+b.vendor+" fuel — "+fmt(b.costPer100)+"/100 km vs "+fmt(w.costPer100)+" at "+w.vendor+"."}); }
+  if (mk===thisMonth()){
+    const dayN=Math.max(1,+todayISO().slice(8,10));
+    if (dayN>=7){ const days=new Set(monthExp(data,mk).map(e=>e.date)).size;
+      const nsd=Math.max(0,dayN-days);
+      if (nsd>0) out.push({ico:"🕊️",tone:"info",msg:nsd+" no-spend day"+(nsd===1?"":"s")+" out of "+dayN+" so far — each one banks about "+fmt0(sp/Math.max(1,days))+"."}); }
+    const fixedCats=new Set(data.recurring.map(r=>r.category));
+    let varLeft=0; Object.entries(data.budgets).forEach(([c,b]) => { if(!fixedCats.has(c)&&c!=="Rent") varLeft+=Math.max(0,(+b||0)-(cur[c]||0)); });
+    const left=Math.max(1, dim(mk)-dayN+1);
+    if (varLeft>0) out.push({ico:"💡",tone:"info",msg:"Safe to spend about "+fmt0(varLeft/left)+"/day on variable categories for the rest of the month."});
+  }
+  return out.slice(0,6);
 }
