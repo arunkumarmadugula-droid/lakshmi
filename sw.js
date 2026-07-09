@@ -1,4 +1,4 @@
-const CACHE = "lakshmi-v2";
+const CACHE = "lakshmi-v4";
 const ASSETS = [
   "./", "./index.html", "./manifest.json", "./icon-180.png", "./icon-512.png",
   "https://unpkg.com/react@18.3.1/umd/react.production.min.js",
