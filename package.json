@@ -1,0 +1,26 @@
+{
+  "name": "lakshmi-private-finance",
+  "version": "7.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "assets": "node scripts/generate-icons.mjs",
+    "dev": "vite --host 127.0.0.1",
+    "build": "npm run assets && vite build && node scripts/generate-sw.mjs && node scripts/verify-build.mjs",
+    "preview": "vite preview --host 127.0.0.1",
+    "test": "node --test tests/*.test.mjs",
+    "check": "npm run test && npm run build"
+  },
+  "dependencies": {
+    "lucide-react": "1.24.0",
+    "pdfjs-dist": "6.1.200",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "6.0.2",
+    "fake-indexeddb": "6.2.5",
+    "sharp": "0.35.3",
+    "vite": "8.1.4"
+  }
+}
