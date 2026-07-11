@@ -19,12 +19,14 @@ import {
   Edit3,
   Eye,
   EyeOff,
+  Fingerprint,
   FileText,
   Fuel,
   Gauge,
   HardDrive,
   Home,
   Image,
+  KeyRound,
   LayoutDashboard,
   List,
   Lock,
@@ -38,6 +40,7 @@ import {
   RotateCcw,
   Save,
   Scale,
+  ScanFace,
   Search,
   Settings,
   Share2,
@@ -46,6 +49,7 @@ import {
   Trash2,
   Upload,
   UserRound,
+  UsersRound,
   WalletCards,
   X,
 } from "lucide-react";
@@ -71,12 +75,14 @@ const ICONS = {
   edit: Edit3,
   eye: Eye,
   "eye-off": EyeOff,
+  fingerprint: Fingerprint,
   file: FileText,
   fuel: Fuel,
   gauge: Gauge,
   drive: HardDrive,
   home: Home,
   image: Image,
+  key: KeyRound,
   board: LayoutDashboard,
   list: List,
   lock: Lock,
@@ -90,6 +96,7 @@ const ICONS = {
   restore: RotateCcw,
   save: Save,
   prices: Scale,
+  face: ScanFace,
   search: Search,
   settings: Settings,
   share: Share2,
@@ -98,6 +105,7 @@ const ICONS = {
   trash: Trash2,
   upload: Upload,
   user: UserRound,
+  users: UsersRound,
   budget: WalletCards,
   x: X,
 };
@@ -153,8 +161,23 @@ export function Field({ label, children, className = "" }) {
   return <label className={`field ${className}`.trim()}><span>{label}</span>{children}</label>;
 }
 
-export function Input({ className = "", ...props }) {
-  return <input className={`input ${className}`.trim()} {...props} />;
+export function Input({ className = "", onFocus, onBlur, onChange, value, ...props }) {
+  const numeric = props.type === "number" || props.inputMode === "numeric" || props.inputMode === "decimal";
+  function focus(event) {
+    if (numeric && onChange && /^0(?:\.0+)?$/.test(String(value ?? "").trim())) {
+      event.target.value = "";
+      onChange(event);
+    }
+    onFocus?.(event);
+  }
+  function blur(event) {
+    if (numeric && onChange && !String(event.target.value).trim()) {
+      event.target.value = "0";
+      onChange(event);
+    }
+    onBlur?.(event);
+  }
+  return <input className={`input ${className}`.trim()} value={value} onChange={onChange} onFocus={focus} onBlur={blur} {...props} />;
 }
 
 export function Select({ className = "", children, ...props }) {

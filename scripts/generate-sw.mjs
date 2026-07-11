@@ -20,14 +20,14 @@ async function filesUnder(dir) {
 const files = await filesUnder(rootPath);
 const hash = createHash("sha256");
 for (const file of files) hash.update(await readFile(file));
-const cacheName = `lakshmi-v7-${hash.digest("hex").slice(0, 12)}`;
+const cacheName = `lakshmi-v8-${hash.digest("hex").slice(0, 12)}`;
 const assets = files.map((file) => `./${relative(rootPath, file).replaceAll("\\", "/")}`);
 assets.unshift("./");
 
 const source = `const CACHE=${JSON.stringify(cacheName)};
 const ASSETS=${JSON.stringify(assets)};
 self.addEventListener("install",event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)));self.skipWaiting();});
-self.addEventListener("activate",event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()));});
+self.addEventListener("activate",event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith("lakshmi-")&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()));});
 self.addEventListener("fetch",event=>{if(event.request.method!=="GET")return;event.respondWith(caches.match(event.request).then(hit=>hit||fetch(event.request).then(response=>{if(!response||response.status!==200||response.type==="opaque")return response;const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy)).catch(()=>{});return response;})).catch(()=>event.request.mode==="navigate"?caches.match("./index.html"):Response.error()));});
 `;
 

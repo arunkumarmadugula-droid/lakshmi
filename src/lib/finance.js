@@ -20,15 +20,15 @@ export const FREQUENCY_LABELS = {
 
 const PROVINCES = {
   AB: { name: "Alberta", bpa: 22769, brackets: [[61200, 0.08], [154259, 0.1], [185111, 0.12], [246813, 0.13], [370220, 0.14], [Infinity, 0.15]] },
-  BC: { name: "British Columbia", bpa: 13217, brackets: [[50363, 0.0506], [100728, 0.077], [115648, 0.105], [140430, 0.1229], [190405, 0.147], [265545, 0.168], [Infinity, 0.205]] },
+  BC: { name: "British Columbia", bpa: 13216, brackets: [[50363, 0.056], [100728, 0.077], [115648, 0.105], [140430, 0.1229], [190405, 0.147], [265545, 0.168], [Infinity, 0.205]] },
   MB: { name: "Manitoba", bpa: 15780, brackets: [[47000, 0.108], [100000, 0.1275], [Infinity, 0.174]] },
   NB: { name: "New Brunswick", bpa: 13664, brackets: [[52333, 0.094], [104666, 0.14], [193861, 0.16], [Infinity, 0.195]] },
-  NL: { name: "Newfoundland and Labrador", bpa: 11067, brackets: [[44678, 0.087], [89354, 0.145], [159528, 0.158], [223340, 0.178], [285319, 0.198], [570638, 0.208], [1141275, 0.213], [Infinity, 0.218]] },
+  NL: { name: "Newfoundland and Labrador", bpa: 13094, brackets: [[44678, 0.087], [89354, 0.145], [159528, 0.158], [223340, 0.178], [285319, 0.198], [570638, 0.208], [1141275, 0.213], [Infinity, 0.218]] },
   NS: { name: "Nova Scotia", bpa: 11967, brackets: [[30995, 0.0879], [61991, 0.1495], [97417, 0.1667], [157124, 0.175], [Infinity, 0.21]] },
   NT: { name: "Northwest Territories", bpa: 18198, brackets: [[53003, 0.059], [106009, 0.086], [172346, 0.122], [Infinity, 0.1405]] },
   NU: { name: "Nunavut", bpa: 19659, brackets: [[55801, 0.04], [111602, 0.07], [181439, 0.09], [Infinity, 0.115]] },
   ON: { name: "Ontario", bpa: 12989, brackets: [[53891, 0.0505], [107785, 0.0915], [150000, 0.1116], [220000, 0.1216], [Infinity, 0.1316]], surtax: [5818, 7446], healthPremium: true },
-  PE: { name: "Prince Edward Island", bpa: 14650, brackets: [[33928, 0.095], [65820, 0.1347], [106890, 0.166], [142250, 0.1762], [Infinity, 0.19]] },
+  PE: { name: "Prince Edward Island", bpa: 14650, brackets: [[33928, 0.095], [65820, 0.1347], [106890, 0.166], [142520, 0.1762], [200000, 0.19], [Infinity, 0.2]] },
   QC: { name: "Quebec", bpa: 18942, brackets: [[54345, 0.14], [108680, 0.19], [132245, 0.24], [Infinity, 0.2575]], quebec: true },
   SK: { name: "Saskatchewan", bpa: 20381, brackets: [[54532, 0.105], [155805, 0.125], [Infinity, 0.145]] },
   YT: { name: "Yukon", bpa: 16452, brackets: [[58523, 0.064], [117045, 0.09], [181440, 0.109], [500000, 0.128], [Infinity, 0.15]] },
@@ -215,15 +215,32 @@ export function monthStats(vault, month) {
   const incomeTransactions = vault.incomeTransactions.filter((item) => monthKey(item.date) === month);
   const cardPayments = vault.cardPayments.filter((item) => monthKey(item.date) === month);
   const income = incomeTransactions.reduce((sum, item) => sum + number(item.amount), 0);
-  const spent = expenses.reduce((sum, item) => sum + number(item.total), 0);
+  const spent = expenses.reduce((sum, item) => sum + expenseNetAmount(vault, item), 0);
   const payments = cardPayments.reduce((sum, item) => sum + number(item.amount), 0);
   const saved = income - spent;
   const categoryMap = {};
-  for (const item of expenses) categoryMap[item.category || "Other"] = (categoryMap[item.category || "Other"] || 0) + number(item.total);
+  for (const item of expenses) categoryMap[item.category || "Other"] = (categoryMap[item.category || "Other"] || 0) + expenseNetAmount(vault, item);
   const categories = Object.entries(categoryMap)
     .map(([name, value]) => ({ name, value, color: CATEGORY_COLORS[name] || CATEGORY_COLORS.Other, percent: spent ? (value / spent) * 100 : 0 }))
     .sort((a, b) => b.value - a.value);
   return { expenses, incomeTransactions, cardPayments, income, spent, saved, payments, categories };
+}
+
+export function splitReceived(vault, expenseId) {
+  return (vault.splitReimbursements || [])
+    .filter((item) => item.expenseId === expenseId)
+    .reduce((sum, item) => sum + number(item.amount), 0);
+}
+
+export function expenseNetAmount(vault, expense) {
+  return Math.max(0, number(expense.total) - splitReceived(vault, expense.id));
+}
+
+export function expenseSplitStatus(vault, expense) {
+  const count = Math.max(0, Math.round(number(expense.split?.count || expense.splitCount)));
+  const expected = number(expense.split?.expectedReimbursement) || (count > 1 ? number(expense.total) - number(expense.total) / count : 0);
+  const received = splitReceived(vault, expense.id);
+  return { count, expected, received, remaining: Math.max(0, expected - received) };
 }
 
 export function history(vault, endMonth = currentMonth(), count = 6) {
@@ -241,8 +258,13 @@ export function dueCards(vault, month) {
     const day = Math.min(number(card.dueDay) || 1, daysInMonth(month));
     const dueDate = statement?.dueDate || `${month}-${pad(day)}`;
     const amount = statement ? number(statement.statementBalance) : card.useLastAmountEstimate ? number(latest?.statementBalance) : null;
-    const payment = vault.cardPayments.find((item) => item.statementId === statement?.id || (item.cardId === card.id && item.dueMonth === month));
-    return { card, statement, latest, dueDate, amount, payment, paid: !!payment };
+    const payments = vault.cardPayments.filter((item) =>
+      (statement?.id && item.statementId === statement.id) ||
+      (item.cardId === card.id && item.dueMonth === month),
+    );
+    const paidAmount = payments.reduce((sum, item) => sum + number(item.amount), 0);
+    const paid = amount == null ? paidAmount > 0 : paidAmount >= amount - 0.005;
+    return { card, statement, latest, dueDate, amount, payments, payment: payments[0], paidAmount, paid };
   }).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 }
 
@@ -281,14 +303,24 @@ export function fuelMetrics(vault, vehicleId) {
     const current = entries[index];
     const distance = number(current.odometer) - number(previous.odometer);
     const litres = number(current.litres);
-    if (distance > 0 && litres > 0) trips.push({ ...current, distance, economy: (litres / distance) * 100, costPer100: number(current.cost) / distance * 100 });
+    if (distance > 0 && litres > 0) {
+      const priorPricePerLitre = number(previous.litres) > 0 ? number(previous.cost) / number(previous.litres) : number(current.cost) / litres;
+      trips.push({
+        ...current,
+        distance,
+        economy: (litres / distance) * 100,
+        costPer100: litres * priorPricePerLitre / distance * 100,
+        sourceStation: previous.station || "Unknown",
+        sourceOctane: previous.octane || "Regular",
+      });
+    }
   }
   const average = trips.length ? trips.reduce((sum, item) => sum + item.economy, 0) / trips.length : 0;
   const costPer100 = trips.length ? trips.reduce((sum, item) => sum + item.costPer100, 0) / trips.length : 0;
   const kmTracked = trips.reduce((sum, item) => sum + item.distance, 0);
   const stationMap = {};
   for (const trip of trips) {
-    const key = `${trip.station || "Unknown"}|${trip.octane || "Regular"}`;
+    const key = `${trip.sourceStation || "Unknown"}|${trip.sourceOctane || "Regular"}`;
     (stationMap[key] ||= []).push(trip.economy);
   }
   const stations = Object.entries(stationMap).map(([name, values]) => ({ name, average: values.reduce((a, b) => a + b, 0) / values.length, fills: values.length })).sort((a, b) => a.average - b.average);

@@ -1,30 +1,38 @@
 # Privacy
 
-Lakshmi is local-first software. The static application code can be hosted publicly, while each user's financial database remains inside that user's browser storage.
+Lakshmi is local-first software. The public host serves only static application files; each browser origin keeps its own encrypted profile database.
 
-## Stored locally
+## Encrypted locally
 
-- Expenses and receipt items
-- Income sources and deposits
-- Budgets and scheduled expenses
-- Payslip figures
-- Credit-card statements and payments
+- Expenses, receipt items, split repayments, and income
+- Budgets, schedules, payslips, and card statements
 - Bank and savings balances
-- Vehicle and fuel records
-- Theme and privacy settings
+- Vehicle and fuel history
+- Archived receipt, payslip, and statement files
+- OpenAI API key, usage history, and cost estimates
+- Settings and local snapshots
 
-Financial data is encrypted before it is written to IndexedDB. The passphrase and decrypted encryption key are not written to disk by Lakshmi.
+The locked profile picker retains the profile label and operational encryption metadata outside the vault. Recovery passphrases, PINs, raw encryption keys, and the plaintext API key are not written to disk by Lakshmi.
 
-## Information that may leave the device
+## Information sent to OpenAI
 
-Lakshmi itself does not sync financial data. A document leaves the device only when the user explicitly chooses **AI read** and selects ChatGPT or another destination in the operating-system share sheet. That document is then governed by the selected destination's privacy terms.
+Lakshmi contacts OpenAI only after the user selects a document for analysis, asks a question from Board Insights, or validates a new API key.
 
-Encrypted `.lakshmi` backup files leave the device only when the user explicitly saves or shares them. The backup remains encrypted and requires the original passphrase.
+- PDF text is extracted locally and used instead of the full PDF when practical.
+- Images are compressed locally before analysis.
+- Financial questions send a compact calculated summary, not the complete vault or archived files.
+- Requests set `store: false`.
+
+OpenAI processing is governed by the user's OpenAI account and API terms. Lakshmi records estimated tokens and cost locally.
+
+## Backups
+
+Portable `.lakshmi` files contain encrypted vault and document ciphertext plus the recovery-key wrapper. The operating-system share sheet controls whether a backup is saved to Files, iCloud Drive, Google Drive, or another provider. Quick biometric/PIN unlock data is never included.
 
 ## Separate users
 
-Browser storage is isolated by website origin and browser profile. Opening the URL on another phone creates an independent database. Multiple local Lakshmi profiles on one browser use separate salts, keys, encrypted vault records, and snapshots.
+Opening the same public URL on another phone creates an independent database. Multiple profiles on one browser use separate master keys, wrappers, records, snapshots, and document namespaces. No application-owned service combines user data.
 
 ## Deletion
 
-Deleting a local profile removes its encrypted vault and local snapshots from that browser. Clearing Safari website data, deleting the Home Screen web app, or losing the device may also remove local records. External encrypted backups are the recovery method.
+Deleting a profile removes its encrypted records, snapshots, document metadata, document ciphertext, and quick unlock from that browser. Clearing website data or deleting the Home Screen app may also remove local records. External encrypted backups are the recovery method.

@@ -1,47 +1,6 @@
 import { CATEGORIES } from "../data/defaults.js";
 import { number, todayISO, uid } from "./format.js";
 
-const RECEIPT_SCHEMA = {
-  store: "",
-  date: "YYYY-MM-DD",
-  category: CATEGORIES.join(" | "),
-  subtotal: 0,
-  tax: 0,
-  total: 0,
-  paymentMethod: "bank | cash | credit",
-  items: [{ name: "", qty: 1, unit: "ea | kg | g | lb | L | ml", lineTotal: 0 }],
-};
-
-const PAYSLIP_SCHEMA = {
-  employer: "",
-  owner: "me | spouse",
-  payDate: "YYYY-MM-DD",
-  periodStart: "YYYY-MM-DD",
-  periodEnd: "YYYY-MM-DD",
-  frequency: "weekly | biweekly | semimonthly | monthly",
-  grossPay: 0,
-  netPay: 0,
-  ytdGross: 0,
-  ytdNet: 0,
-  deductions: [{ name: "", amount: 0, ytd: 0 }],
-};
-
-const CARD_SCHEMA = {
-  bank: "",
-  cardName: "",
-  last4: "",
-  statementDate: "YYYY-MM-DD",
-  dueDate: "YYYY-MM-DD",
-  statementBalance: 0,
-  minimumPayment: 0,
-};
-
-export const AI_PROMPTS = {
-  receipt: `Read the attached receipt and return only valid JSON. Do not use markdown fences. Use this shape: ${JSON.stringify(RECEIPT_SCHEMA)}. Capture every visible item. Use plain numbers. Use an ISO date. Choose the closest listed category. Do not invent unreadable values.`,
-  payslip: `Read the attached Canadian payslip and return only valid JSON. Do not use markdown fences. Use this shape: ${JSON.stringify(PAYSLIP_SCHEMA)}. Capture every deduction line exactly as printed, including this-period and YTD values. Use plain numbers and ISO dates.`,
-  card: `Read the attached credit-card statement or account summary and return only valid JSON. Do not use markdown fences. Use this shape: ${JSON.stringify(CARD_SCHEMA)}. The statement balance is the new or closing balance. Capture the bill generation date, due date, minimum payment, bank, card name, and last four digits. Use plain numbers and ISO dates.`,
-};
-
 function parseDate(text) {
   const iso = text.match(/\b(20\d{2})[-/.](0?[1-9]|1[0-2])[-/.](0?[1-9]|[12]\d|3[01])\b/);
   if (iso) return `${iso[1]}-${String(iso[2]).padStart(2, "0")}-${String(iso[3]).padStart(2, "0")}`;
@@ -87,10 +46,15 @@ function receiptDraft(text = "") {
     category: /fuel|gasoline|litres|liter|octane/i.test(text) ? "Fuel" : "Groceries",
     subtotal: Math.max(0, amountAfter(text, ["subtotal"]) || total - tax),
     tax,
+    tip: amountAfter(text, ["tip", "gratuity"]),
+    discount: amountAfter(text, ["discount", "coupon", "savings"]),
     total,
     paymentMethod: "bank",
     cardId: "",
     items,
+    warnings: [],
+    splitEnabled: false,
+    splitCount: 2,
   };
 }
 
@@ -106,7 +70,7 @@ function payslipDraft(text = "") {
     ["EI", ["employment insurance", " ei"]],
     ["Pension", ["pension"]],
     ["Benefits", ["benefits", "health", "dental"]],
-  ].map(([name, labels]) => ({ id: uid("deduction"), name, amount: amountAfter(text, labels), ytd: 0 })).filter((item) => item.amount > 0);
+  ].map(([name, labels]) => ({ id: uid("deduction"), name, amount: amountAfter(text, labels), ytd: 0, direction: "out" })).filter((item) => item.amount > 0);
   return {
     kind: "payslip",
     employer: likelyStore(lines),
@@ -120,6 +84,7 @@ function payslipDraft(text = "") {
     ytdGross: amountAfter(text, ["ytd gross", "gross ytd"]),
     ytdNet: amountAfter(text, ["ytd net", "net ytd"]),
     deductions,
+    warnings: [],
   };
 }
 
@@ -137,6 +102,7 @@ function cardDraft(text = "") {
     dueDate: parseDate(dueContext),
     statementBalance: amountAfter(text, ["new balance", "closing balance", "statement balance", "total balance"]),
     minimumPayment: amountAfter(text, ["minimum payment", "minimum amount due"]),
+    warnings: [],
   };
 }
 
@@ -170,7 +136,7 @@ async function extractPdf(file, maxPages = 5) {
   return { text: output.join("\n"), pageCount: pdf.numPages };
 }
 
-async function compressImage(file, maxDimension = 1500, quality = 0.76) {
+async function compressImage(file, maxDimension = 1800, quality = 0.78) {
   let image;
   let revoke = null;
   try {
@@ -204,11 +170,12 @@ async function compressImage(file, maxDimension = 1500, quality = 0.76) {
 
 export async function prepareDocument(file, kind) {
   if (!file) throw new Error("Choose a PDF or image first.");
+  if (file.size > 25 * 1024 * 1024) throw new Error("Choose a document smaller than 25 MB.");
   const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
   const isImage = file.type.startsWith("image/");
   if (!isPdf && !isImage) throw new Error("Lakshmi accepts PDF, JPG, PNG, HEIC, and browser-supported images.");
   let text = "";
-  let shareFile = file;
+  let preparedFile = file;
   let pageCount = 1;
   if (isPdf) {
     try {
@@ -220,46 +187,35 @@ export async function prepareDocument(file, kind) {
     }
   } else {
     try {
-      shareFile = await compressImage(file);
+      preparedFile = await compressImage(file);
     } catch {
-      shareFile = file;
+      preparedFile = file;
     }
   }
   return {
     kind,
     fileName: file.name,
-    mimeType: file.type,
+    mimeType: isPdf ? "application/pdf" : (preparedFile.type || file.type),
     originalBytes: file.size,
-    preparedBytes: shareFile.size,
+    preparedBytes: preparedFile.size,
     pageCount,
     text,
-    shareFile,
+    archiveFile: preparedFile,
+    analysisFile: preparedFile,
+    shareFile: preparedFile,
     draft: draftFromText(kind, text),
   };
 }
 
-export async function shareForChatGPT(prepared) {
-  const prompt = AI_PROMPTS[prepared.kind];
-  const files = [prepared.shareFile];
-  if (navigator.share && (!navigator.canShare || navigator.canShare({ files }))) {
-    await navigator.share({ title: "Read for Lakshmi", text: prompt, files });
-    return "shared";
-  }
-  await navigator.clipboard.writeText(prompt);
-  return "copied";
-}
-
-export async function copyAiPrompt(kind) {
-  await navigator.clipboard.writeText(AI_PROMPTS[kind]);
-}
-
 export function parseAiResult(value, kind) {
-  const clean = String(value || "").replace(/```json|```/gi, "").trim();
-  let parsed;
-  try {
-    parsed = JSON.parse(clean);
-  } catch {
-    throw new Error("The pasted result is not valid JSON. Ask ChatGPT to return JSON only.");
+  let parsed = value;
+  if (typeof value === "string") {
+    const clean = String(value || "").replace(/```json|```/gi, "").trim();
+    try {
+      parsed = JSON.parse(clean);
+    } catch {
+      throw new Error("The AI result is not valid JSON.");
+    }
   }
   const base = blankDraft(kind);
   if (kind === "receipt") {
@@ -269,7 +225,8 @@ export function parseAiResult(value, kind) {
       kind,
       date: parsed.date || todayISO(),
       category: CATEGORIES.includes(parsed.category) ? parsed.category : "Other",
-      subtotal: number(parsed.subtotal), tax: number(parsed.tax), total: number(parsed.total),
+      subtotal: number(parsed.subtotal), tax: number(parsed.tax), tip: number(parsed.tip), discount: number(parsed.discount), total: number(parsed.total),
+      warnings: Array.isArray(parsed.warnings) ? parsed.warnings.map(String) : [],
       items: Array.isArray(parsed.items) ? parsed.items.map((item) => ({ id: uid("item"), name: item.name || "", qty: number(item.qty) || 1, unit: item.unit || "ea", lineTotal: number(item.lineTotal) })) : [],
     };
   }
@@ -277,25 +234,14 @@ export function parseAiResult(value, kind) {
     return {
       ...base, ...parsed, kind,
       grossPay: number(parsed.grossPay), netPay: number(parsed.netPay), ytdGross: number(parsed.ytdGross), ytdNet: number(parsed.ytdNet),
-      deductions: Array.isArray(parsed.deductions) ? parsed.deductions.map((item) => ({ id: uid("deduction"), name: item.name || "", amount: number(item.amount), ytd: number(item.ytd) })) : [],
+      deductions: Array.isArray(parsed.deductions) ? parsed.deductions.map((item) => ({ id: uid("deduction"), name: item.name || "", amount: number(item.amount), ytd: number(item.ytd), direction: item.direction === "in" ? "in" : "out" })) : [],
+      warnings: Array.isArray(parsed.warnings) ? parsed.warnings.map(String) : [],
     };
   }
   return {
     ...base, ...parsed, kind,
     last4: String(parsed.last4 || "").replace(/\D/g, "").slice(-4),
     statementBalance: number(parsed.statementBalance), minimumPayment: number(parsed.minimumPayment),
+    warnings: Array.isArray(parsed.warnings) ? parsed.warnings.map(String) : [],
   };
-}
-
-export async function readClipboardImage(kind) {
-  if (!navigator.clipboard?.read) throw new Error("Use Photo library on this browser, or paste ChatGPT JSON instead.");
-  const items = await navigator.clipboard.read();
-  for (const item of items) {
-    const imageType = item.types.find((type) => type.startsWith("image/"));
-    if (!imageType) continue;
-    const blob = await item.getType(imageType);
-    const file = new File([blob], `clipboard-${Date.now()}.png`, { type: imageType });
-    return prepareDocument(file, kind);
-  }
-  throw new Error("No image was found on the clipboard.");
 }

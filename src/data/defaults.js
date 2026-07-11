@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const CATEGORY_DEFINITIONS = [
   ["Housing", "#9bc7ea"],
@@ -17,6 +17,7 @@ export const CATEGORY_DEFINITIONS = [
   ["Education", "#adc9ba"],
   ["Entertainment", "#d6b6b6"],
   ["Travel", "#b1cad2"],
+  ["Debt & EMI", "#c4b7a6"],
   ["Gifts", "#d9c4a5"],
   ["Other", "#b9b9b9"],
 ];
@@ -41,6 +42,7 @@ export const BUDGET_SUBCATEGORIES = {
   Education: ["Tuition", "Books", "Courses", "School supplies", "Other"],
   Entertainment: ["Movies", "Events", "Games", "Hobbies", "Other"],
   Travel: ["Flights", "Hotels", "Local travel", "Food", "Other"],
+  "Debt & EMI": ["Auto loan", "Personal loan", "Student loan", "Buy now pay later", "Other"],
   Gifts: ["Family", "Friends", "Charity", "Other"],
   Other: ["Other"],
 };
@@ -68,7 +70,14 @@ export function createEmptyVault(profileName = "My household") {
       lastExternalBackupAt: null,
       lastLocalSnapshotAt: null,
       storagePersistent: false,
-      aiMode: "chatgpt-share",
+      backupMode: "device",
+      aiMode: "direct-api",
+    },
+    ai: {
+      apiKey: "",
+      model: "gpt-5.4-mini",
+      consentAt: null,
+      usage: [],
     },
     expenses: [],
     incomeSources: [],
@@ -83,6 +92,7 @@ export function createEmptyVault(profileName = "My household") {
     savingsTransfers: [],
     vehicles: [],
     fuelEntries: [],
+    splitReimbursements: [],
   };
 }
 
@@ -95,6 +105,7 @@ export function normalizeVault(input, profileName) {
     schemaVersion: SCHEMA_VERSION,
     profile: { ...base.profile, ...(source.profile || {}) },
     settings: { ...base.settings, ...(source.settings || {}) },
+    ai: { ...base.ai, ...(source.ai || {}) },
     expenses: Array.isArray(source.expenses) ? source.expenses : [],
     incomeSources: Array.isArray(source.incomeSources) ? source.incomeSources : [],
     incomeTransactions: Array.isArray(source.incomeTransactions) ? source.incomeTransactions : [],
@@ -108,5 +119,6 @@ export function normalizeVault(input, profileName) {
     savingsTransfers: Array.isArray(source.savingsTransfers) ? source.savingsTransfers : [],
     vehicles: Array.isArray(source.vehicles) ? source.vehicles : [],
     fuelEntries: Array.isArray(source.fuelEntries) ? source.fuelEntries : [],
+    splitReimbursements: Array.isArray(source.splitReimbursements) ? source.splitReimbursements : [],
   };
 }

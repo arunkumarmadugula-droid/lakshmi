@@ -3,6 +3,10 @@ import { fuelMetrics } from "../lib/finance.js";
 import { money, number, todayISO, uid } from "../lib/format.js";
 import { Button, Card, CardHeader, EmptyState, Field, Icon, IconButton, Input, Modal, Select } from "../components/ui.jsx";
 
+const OFFLINE_VEHICLE_SUPPLEMENTS = [
+  { y: 2024, m: "Ford", n: "Bronco Sport Badlands 4WD", c: 10.2, ct: 11.2, h: 9.0, f: "X/Z", cl: "Sport utility vehicle: Small", t: 60.6 },
+];
+
 export default function FuelTab({ vault, persist, notify, openModal }) {
   const vehicle = vault.vehicles.find((item) => item.active !== false) || vault.vehicles[0];
   const metrics = useMemo(() => fuelMetrics(vault, vehicle?.id), [vault, vehicle?.id]);
@@ -17,11 +21,17 @@ export default function FuelTab({ vault, persist, notify, openModal }) {
   function removeFill(entry) {
     if (!window.confirm(`Delete fill-up from ${entry.date}?`)) return;
     const expense = vault.expenses.find((item) => item.id === entry.sourceExpenseId);
-    persist({
-      ...vault,
-      fuelEntries: vault.fuelEntries.filter((item) => item.id !== entry.id),
-      expenses: expense ? vault.expenses.filter((item) => item.id !== expense.id) : vault.expenses,
-      settings: expense && expense.paymentMethod !== "credit" ? { ...vault.settings, bankBalance: number(vault.settings.bankBalance) + number(expense.total) } : vault.settings,
+    persist((current) => {
+      const related = expense ? (current.splitReimbursements || []).filter((item) => item.expenseId === expense.id) : [];
+      const repaid = related.reduce((sum, item) => sum + number(item.amount), 0);
+      const restored = expense ? (expense.paymentMethod === "credit" ? 0 : number(expense.total)) - repaid : 0;
+      return {
+        ...current,
+        fuelEntries: current.fuelEntries.filter((item) => item.id !== entry.id),
+        expenses: expense ? current.expenses.filter((item) => item.id !== expense.id) : current.expenses,
+        splitReimbursements: expense ? (current.splitReimbursements || []).filter((item) => item.expenseId !== expense.id) : current.splitReimbursements,
+        settings: { ...current.settings, bankBalance: number(current.settings.bankBalance) + restored },
+      };
     });
     notify("Fill-up removed and linked expense reconciled.");
   }
@@ -43,26 +53,21 @@ export default function FuelTab({ vault, persist, notify, openModal }) {
           <div className="metric-tile"><div className="label">Tracked</div><div className="metric-value">{Math.round(metrics.kmTracked)}</div><div className="helper">km</div></div>
           <div className="metric-tile"><div className="label">Range</div><div className="metric-value">{range ? Math.round(range) : "--"}</div><div className="helper">estimated km</div></div>
         </div>
+        <details className="settings-section fuel-tools">
+          <summary><span><Icon name="gauge" />Fuel details and trip estimate</span><Icon name="chevron-down" /></summary>
+          <div className="settings-section-body">
+            <div className="row"><span>Best station / fuel</span><strong>{metrics.bestStation?.name || "Not enough data"}</strong></div>
+            <div className="row"><span>Cost per 100 km</span><strong className="money">{metrics.costPer100 ? money(metrics.costPer100) : "--"}</strong></div>
+            <div className="row"><span>Official combined rating</span><strong className="money">{vehicle.combinedRating ? `${vehicle.combinedRating} L/100 km` : "--"}</strong></div>
+            <div className="field-grid" style={{ marginTop: 10 }}><Field label="Trip distance km"><Input inputMode="decimal" value={tripDistance} onChange={(event) => setTripDistance(event.target.value)} /></Field><Field label="Fuel price / L"><Input inputMode="decimal" value={tripPrice} onChange={(event) => setTripPrice(event.target.value)} /></Field></div>
+            {(tripLitres > 0 || tripCost > 0) && <div className="balance-strip" style={{ marginTop: 10 }}><div><div className="label">Fuel</div><strong className="money">{tripLitres.toFixed(1)} L</strong></div><div><div className="label">Cost</div><strong className="money">{money(tripCost)}</strong></div></div>}
+          </div>
+        </details>
       </Card>
 
       <Card>
         <CardHeader label="Fill-ups" helper="Odometer, litres, station, and octane" action={<Button compact onClick={() => setFillOpen((value) => !value)}><Icon name={fillOpen ? "x" : "plus"} />{fillOpen ? "Close" : "Log fill-up"}</Button>} noMargin={!fillOpen} />
         {fillOpen && <FillForm vehicle={vehicle} vault={vault} persist={persist} notify={notify} onSaved={() => setFillOpen(false)} />}
-      </Card>
-
-      <Card>
-        <CardHeader label="Smart summary" helper="Calculated from full-tank odometer intervals" />
-        <div className="row"><span>Best station / fuel</span><strong>{metrics.bestStation?.name || "Not enough data"}</strong></div>
-        <div className="row"><span>Observed fuel economy</span><strong className="money">{metrics.average ? `${metrics.average.toFixed(1)} L/100 km` : "--"}</strong></div>
-        <div className="row"><span>Cost per 100 km</span><strong className="money">{metrics.costPer100 ? money(metrics.costPer100) : "--"}</strong></div>
-        <div className="row"><span>Official combined rating</span><strong className="money">{vehicle.combinedRating ? `${vehicle.combinedRating} L/100 km` : "--"}</strong></div>
-      </Card>
-
-      <Card>
-        <CardHeader label="Trip estimator" helper="Uses observed economy first, then the offline NRCan rating" />
-        <div className="field-grid"><Field label="Distance km"><Input inputMode="decimal" value={tripDistance} onChange={(event) => setTripDistance(event.target.value)} /></Field><Field label="Fuel price / L"><Input inputMode="decimal" value={tripPrice} onChange={(event) => setTripPrice(event.target.value)} /></Field></div>
-        <div className="row"><span>Estimated fuel</span><strong className="money">{tripLitres ? `${tripLitres.toFixed(1)} L` : "--"}</strong></div>
-        <div className="row"><span>Estimated cost</span><strong className="money">{tripCost ? money(tripCost) : "--"}</strong></div>
       </Card>
 
       <Card>
@@ -86,7 +91,7 @@ function VehicleModal({ vault, vehicle, persist, notify, onClose }) {
   useEffect(() => {
     fetch(`${import.meta.env.BASE_URL}vehicle-ratings-ca-2020-2026.json`)
       .then((response) => response.ok ? response.json() : Promise.reject(new Error("Catalogue unavailable")))
-      .then(setVehicleRatings)
+      .then((items) => setVehicleRatings([...OFFLINE_VEHICLE_SUPPLEMENTS, ...items]))
       .catch(() => setCatalogueError("Offline catalogue could not be loaded. Reopen Lakshmi once online to cache it."));
   }, []);
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
@@ -98,7 +103,7 @@ function VehicleModal({ vault, vehicle, persist, notify, onClose }) {
   }
   function chooseModel(value) {
     const rating = models.find((item) => item.n === value);
-    setForm((current) => ({ ...current, model: value, combinedRating: rating?.c || "", cityRating: rating?.ct || "", highwayRating: rating?.h || "", fuelType: rating?.f || "", vehicleClass: rating?.cl || "" }));
+    setForm((current) => ({ ...current, model: value, combinedRating: rating?.c || "", cityRating: rating?.ct || "", highwayRating: rating?.h || "", fuelType: rating?.f || "", vehicleClass: rating?.cl || "", tankCapacity: rating?.t || current.tankCapacity || "" }));
   }
   function save() {
     if (!form.make || !form.model) return;

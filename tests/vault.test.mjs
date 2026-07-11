@@ -25,10 +25,13 @@ test("encrypted profiles unlock, reject a wrong passphrase, and restore as isola
   });
   const {
     buildEncryptedBackup,
+    configureQuickUnlock,
     createProfile,
     importEncryptedBackup,
     listProfiles,
     saveVault,
+    storeEncryptedDocument,
+    readEncryptedDocument,
     unlockProfile,
   } = await import("../src/lib/vaultDb.js");
 
@@ -39,6 +42,12 @@ test("encrypted profiles unlock, reject a wrong passphrase, and restore as isola
   await assert.rejects(unlockProfile(created.profile.id, "wrong passphrase"), /incorrect|damaged/i);
   const unlocked = await unlockProfile(created.profile.id, "correct horse battery staple");
   assert.equal(unlocked.vault.expenses[0].store, "Private store");
+
+  await configureQuickUnlock(created.profile.id, "correct horse battery staple", "pin", "2486");
+  const sourceDocument = new File(["private receipt contents"], "receipt.txt", { type: "text/plain" });
+  const documentRecord = await storeEncryptedDocument(created.profile.id, created.key, sourceDocument, { kind: "receipt", date: "2026-07-09", recordId: "private-expense" });
+  const document = await readEncryptedDocument(created.profile.id, created.key, documentRecord.id);
+  assert.equal(await document.text(), "private receipt contents");
 
   const rawVault = await new Promise((resolve, reject) => {
     const openRequest = indexedDB.open(databaseName);
@@ -56,12 +65,16 @@ test("encrypted profiles unlock, reject a wrong passphrase, and restore as isola
   assert.doesNotMatch(JSON.stringify(rawVault), /Private store/);
 
   const { file } = await buildEncryptedBackup(created.profile.id);
+  const portableBackup = JSON.parse(await file.text());
+  assert.equal(portableBackup.profile.quickUnlock, undefined);
+  assert.equal(portableBackup.documents.length, 1);
   const restoredProfile = await importEncryptedBackup(file);
   const profiles = await listProfiles();
   assert.equal(profiles.length, 2);
   assert.notEqual(restoredProfile.id, created.profile.id);
   const restored = await unlockProfile(restoredProfile.id, "correct horse battery staple");
   assert.equal(restored.vault.expenses[0].id, "private-expense");
+  assert.equal(restoredProfile.quickUnlock, null);
 
   const unsafeBackup = new File([JSON.stringify({
     format: "lakshmi-encrypted-backup",

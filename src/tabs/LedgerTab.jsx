@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { CATEGORIES } from "../data/defaults.js";
-import { monthStats } from "../lib/finance.js";
+import { expenseNetAmount, expenseSplitStatus, monthStats } from "../lib/finance.js";
 import { currentMonth, money, monthKey, monthLabel, number, shiftMonth } from "../lib/format.js";
+import { copySplitExpense, saveSplitPdf, shareSplitExpense } from "../lib/share.js";
 import { Button, Card, CardHeader, Field, Icon, IconButton, Input, Modal, MonthNavigator, Segmented, Select } from "../components/ui.jsx";
 
 export default function LedgerTab({ vault, persist, notify, openModal }) {
@@ -12,23 +13,47 @@ export default function LedgerTab({ vault, persist, notify, openModal }) {
   const query = search.trim().toLowerCase();
   const expenses = useMemo(() => vault.expenses.filter((item) => (scope === "all" || monthKey(item.date) === month) && (!query || `${item.store} ${item.category} ${(item.items || []).map((entry) => entry.name).join(" ")}`.toLowerCase().includes(query))).sort((a, b) => b.date.localeCompare(a.date)), [vault.expenses, scope, month, query]);
   const incomes = useMemo(() => vault.incomeTransactions.filter((item) => (scope === "all" || monthKey(item.date) === month) && (!query || `${item.name} ${item.owner}`.toLowerCase().includes(query))).sort((a, b) => b.date.localeCompare(a.date)), [vault.incomeTransactions, scope, month, query]);
+  const reimbursements = useMemo(() => (vault.splitReimbursements || []).filter((item) => {
+    const expense = vault.expenses.find((entry) => entry.id === item.expenseId);
+    return (scope === "all" || monthKey(item.date) === month) && (!query || `${item.person} ${expense?.store || ""}`.toLowerCase().includes(query));
+  }).sort((a, b) => b.date.localeCompare(a.date)), [vault.splitReimbursements, vault.expenses, scope, month, query]);
+  const statements = useMemo(() => vault.cardStatements.filter((statement) => {
+    const card = vault.creditCards.find((item) => item.id === statement.cardId);
+    return (scope === "all" || monthKey(statement.statementDate || statement.dueDate) === month) && (!query || `${card?.bank || ""} ${card?.name || ""} ${card?.last4 || ""}`.toLowerCase().includes(query));
+  }).sort((a, b) => String(b.statementDate).localeCompare(String(a.statementDate))), [vault.cardStatements, vault.creditCards, scope, month, query]);
   const payments = useMemo(() => vault.cardPayments.filter((item) => scope === "all" || monthKey(item.date) === month).sort((a, b) => b.date.localeCompare(a.date)), [vault.cardPayments, scope, month]);
   const selectedIncome = scope === "month" ? stats.income : incomes.reduce((sum, item) => sum + number(item.amount), 0);
   const categoryTotals = useMemo(() => {
     const map = {};
-    for (const expense of expenses) map[expense.category || "Other"] = (map[expense.category || "Other"] || 0) + number(expense.total);
+    for (const expense of expenses) map[expense.category || "Other"] = (map[expense.category || "Other"] || 0) + expenseNetAmount(vault, expense);
     return Object.entries(map).map(([category, amount]) => ({ category, amount, percent: selectedIncome ? (amount / selectedIncome) * 100 : 0 })).sort((a, b) => b.amount - a.amount);
-  }, [expenses, selectedIncome]);
+  }, [expenses, selectedIncome, vault]);
 
   function removeExpense(expense) {
     if (!window.confirm(`Delete ${expense.store} for ${money(expense.total)}?`)) return;
+    persist((current) => {
+      const related = (current.splitReimbursements || []).filter((item) => item.expenseId === expense.id);
+      const repaid = related.reduce((sum, item) => sum + number(item.amount), 0);
+      const balanceChange = (expense.paymentMethod === "credit" ? 0 : number(expense.total)) - repaid;
+      return {
+        ...current,
+        expenses: current.expenses.filter((item) => item.id !== expense.id),
+        fuelEntries: current.fuelEntries.filter((item) => item.sourceExpenseId !== expense.id),
+        splitReimbursements: (current.splitReimbursements || []).filter((item) => item.expenseId !== expense.id),
+        settings: { ...current.settings, bankBalance: number(current.settings.bankBalance) + balanceChange },
+      };
+    });
+    notify("Expense removed and balance adjusted.");
+  }
+
+  function removeReimbursement(repayment) {
+    if (!window.confirm(`Delete repayment of ${money(repayment.amount)}?`)) return;
     persist((current) => ({
       ...current,
-      expenses: current.expenses.filter((item) => item.id !== expense.id),
-      fuelEntries: current.fuelEntries.filter((item) => item.sourceExpenseId !== expense.id),
-      settings: expense.paymentMethod === "credit" ? current.settings : { ...current.settings, bankBalance: number(current.settings.bankBalance) + number(expense.total) },
+      splitReimbursements: (current.splitReimbursements || []).filter((item) => item.id !== repayment.id),
+      settings: { ...current.settings, bankBalance: number(current.settings.bankBalance) - number(repayment.amount) },
     }));
-    notify("Expense removed and balance adjusted.");
+    notify("Split repayment removed and spending restored.");
   }
 
   function removeIncome(income) {
@@ -45,6 +70,12 @@ export default function LedgerTab({ vault, persist, notify, openModal }) {
     if (!window.confirm(`Delete card payment of ${money(payment.amount)}?`)) return;
     persist((current) => ({ ...current, cardPayments: current.cardPayments.filter((item) => item.id !== payment.id), settings: { ...current.settings, bankBalance: number(current.settings.bankBalance) + number(payment.amount) } }));
     notify("Card payment removed and bank balance restored.");
+  }
+
+  function removeStatement(statement) {
+    if (!window.confirm(`Delete card statement for ${money(statement.statementBalance)}?`)) return;
+    persist((current) => ({ ...current, cardStatements: current.cardStatements.filter((item) => item.id !== statement.id) }));
+    notify("Card statement removed. Recorded payments remain in their separate ledger.");
   }
 
   return (
@@ -65,13 +96,25 @@ export default function LedgerTab({ vault, persist, notify, openModal }) {
 
       <Card>
         <CardHeader label="Expenses" helper={`${expenses.length} recorded transaction${expenses.length === 1 ? "" : "s"}`} />
-        {expenses.length ? expenses.map((expense) => (
-          <div className="row with-icon" key={expense.id}>
-            <span className="icon-box"><Icon name={expense.paymentMethod === "credit" ? "card" : "ledger"} /></span>
-            <span className="truncate"><strong>{expense.store}</strong><br /><span className="helper">{expense.date} - {expense.category}{expense.paymentMethod === "credit" ? " - credit" : ""}</span></span>
-            <span className="row-actions"><strong className="money text-out">-{money(expense.total)}</strong><IconButton icon="edit" label="Edit expense" onClick={() => openModal({ content: <EditExpenseModal expense={expense} vault={vault} persist={persist} notify={notify} onClose={() => openModal(null)} /> })} /><IconButton icon="trash" label="Delete expense" className="danger" onClick={() => removeExpense(expense)} /></span>
-          </div>
-        )) : <div className="helper">No expenses in this view.</div>}
+        {expenses.length ? expenses.map((expense) => {
+          const split = expenseSplitStatus(vault, expense);
+          const net = expenseNetAmount(vault, expense);
+          return (
+            <div className="row with-icon" key={expense.id}>
+              <span className="icon-box"><Icon name={expense.paymentMethod === "credit" ? "card" : "ledger"} /></span>
+              <span className="truncate"><strong>{expense.store}</strong><br /><span className="helper">{expense.date} - {expense.category}{expense.paymentMethod === "credit" ? " - credit" : ""}{split.count > 1 ? ` - ${money(expense.total)} / ${split.count}; ${money(split.received)} repaid` : ""}</span></span>
+              <span className="row-actions"><strong className="money text-out">-{money(net)}</strong><IconButton icon="edit" label="Edit expense" onClick={() => openModal({ content: <EditExpenseModal expense={expense} vault={vault} persist={persist} notify={notify} onClose={() => openModal(null)} /> })} /><IconButton icon="trash" label="Delete expense" className="danger" onClick={() => removeExpense(expense)} /></span>
+            </div>
+          );
+        }) : <div className="helper">No expenses in this view.</div>}
+      </Card>
+
+      <Card>
+        <CardHeader label="Bill split repayments" helper="Reimbursements reduce the original expense and are not counted as income" />
+        {reimbursements.length ? reimbursements.map((repayment) => {
+          const expense = vault.expenses.find((item) => item.id === repayment.expenseId);
+          return <div className="row with-icon" key={repayment.id}><span className="icon-box" style={{ color: "var(--inflow)" }}><Icon name="users" /></span><span className="truncate"><strong>{repayment.person || "Bill split repayment"}</strong><br /><span className="helper">{repayment.date} - {expense?.store || "Deleted bill"}</span></span><span className="row-actions"><strong className="money text-in">+{money(repayment.amount)}</strong><IconButton icon="trash" label="Delete repayment" className="danger" onClick={() => removeReimbursement(repayment)} /></span></div>;
+        }) : <div className="helper">No split repayments in this view.</div>}
       </Card>
 
       <Card>
@@ -83,6 +126,14 @@ export default function LedgerTab({ vault, persist, notify, openModal }) {
             <span className="row-actions"><strong className="money text-in">+{money(income.amount)}</strong><IconButton icon="trash" label="Delete income" className="danger" onClick={() => removeIncome(income)} /></span>
           </div>
         )) : <div className="helper">No income deposits in this view.</div>}
+      </Card>
+
+      <Card>
+        <CardHeader label="Credit card statements" helper="Bills and due dates are excluded from Spent" />
+        {statements.length ? statements.map((statement) => {
+          const card = vault.creditCards.find((item) => item.id === statement.cardId);
+          return <div className="row with-icon" key={statement.id}><span className="icon-box"><Icon name="file" /></span><span className="truncate"><strong>{card ? `${card.bank} ${card.last4 ? `...${card.last4}` : card.name}` : "Card statement"}</strong><br /><span className="helper">Generated {statement.statementDate} - due {statement.dueDate}</span></span><span className="row-actions"><strong className="money">{money(statement.statementBalance)}</strong><IconButton icon="trash" label="Delete statement" className="danger" onClick={() => removeStatement(statement)} /></span></div>;
+        }) : <div className="helper">No card statements in this view.</div>}
       </Card>
 
       <Card>
@@ -98,17 +149,39 @@ export default function LedgerTab({ vault, persist, notify, openModal }) {
 
 function EditExpenseModal({ expense, vault, persist, notify, onClose }) {
   const [draft, setDraft] = useState({ ...expense });
+  const [error, setError] = useState("");
   const update = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
   function save() {
+    const priorSplit = expenseSplitStatus(vault, expense);
+    if (!draft.split && priorSplit.received > 0) {
+      setError("Remove the recorded split repayments before turning off this split.");
+      return;
+    }
+    const splitCount = Math.max(2, Math.round(number(draft.split?.count) || 2));
+    const split = draft.split ? {
+      count: splitCount,
+      expectedReimbursement: Math.round((number(draft.total) - number(draft.total) / splitCount) * 100) / 100,
+    } : null;
+    if (split && priorSplit.received > split.expectedReimbursement + 0.005) {
+      setError(`Recorded repayments already total ${money(priorSplit.received)}. Increase the bill or remove a repayment first.`);
+      return;
+    }
     const oldImpact = expense.paymentMethod === "credit" ? 0 : number(expense.total);
     const newImpact = draft.paymentMethod === "credit" ? 0 : number(draft.total);
-    persist({
-      ...vault,
-      expenses: vault.expenses.map((item) => item.id === expense.id ? { ...draft, total: number(draft.total), subtotal: number(draft.subtotal), tax: number(draft.tax), cardId: draft.paymentMethod === "credit" ? draft.cardId || "" : "" } : item),
-      settings: { ...vault.settings, bankBalance: number(vault.settings.bankBalance) + oldImpact - newImpact },
-    });
+    persist((current) => ({
+      ...current,
+      expenses: current.expenses.map((item) => item.id === expense.id ? { ...draft, split, total: number(draft.total), subtotal: number(draft.subtotal), tax: number(draft.tax), cardId: draft.paymentMethod === "credit" ? draft.cardId || "" : "" } : item),
+      settings: { ...current.settings, bankBalance: number(current.settings.bankBalance) + oldImpact - newImpact },
+    }));
     notify("Expense updated and balance reconciled.");
     onClose();
+  }
+  async function share() {
+    try {
+      await shareSplitExpense({ ...draft, split: draft.split || { count: 2 } });
+    } catch (reason) {
+      if (reason?.name !== "AbortError") notify(reason.message || "The split could not be shared.");
+    }
   }
   return (
     <Modal label="Ledger" title="Edit expense" onClose={onClose}>
@@ -117,6 +190,10 @@ function EditExpenseModal({ expense, vault, persist, notify, onClose }) {
         <div className="field-grid"><Field label="Date"><Input type="date" value={draft.date} onChange={(event) => update("date", event.target.value)} /></Field><Field label="Category"><Select value={draft.category} onChange={(event) => update("category", event.target.value)}>{CATEGORIES.map((category) => <option key={category}>{category}</option>)}</Select></Field></div>
         <div className="field-grid"><Field label="Total"><Input inputMode="decimal" value={draft.total} onChange={(event) => update("total", event.target.value)} /></Field><Field label="Paid with"><Select value={draft.paymentMethod || "bank"} onChange={(event) => update("paymentMethod", event.target.value)}><option value="bank">Bank / debit</option><option value="cash">Cash</option><option value="credit">Credit card</option></Select></Field></div>
         {draft.paymentMethod === "credit" && <Field label="Card"><Select value={draft.cardId || ""} onChange={(event) => update("cardId", event.target.value)}><option value="">Unspecified</option>{vault.creditCards.map((card) => <option key={card.id} value={card.id}>{card.bank} {card.last4 ? `...${card.last4}` : card.name}</option>)}</Select></Field>}
+        <label className="check-row"><input type="checkbox" checked={!!draft.split} onChange={(event) => update("split", event.target.checked ? { count: expense.split?.count || 2 } : null)} /><span>Split this bill</span></label>
+        {draft.split && <Field label="People including you"><Input inputMode="numeric" value={draft.split.count || 2} onChange={(event) => update("split", { ...draft.split, count: event.target.value })} /></Field>}
+        {draft.split && <div className="button-row"><Button compact onClick={share}><Icon name="share" />Share</Button><Button compact onClick={() => copySplitExpense({ ...draft, split: draft.split }).then(() => notify("Split details copied."))}><Icon name="copy" />Copy</Button><Button compact onClick={() => saveSplitPdf({ ...draft, split: draft.split })}><Icon name="download" />PDF</Button></div>}
+        {error && <div className="error-text">{error}</div>}
         <Button kind="primary" onClick={save}><Icon name="save" />Save changes</Button>
       </div>
     </Modal>
