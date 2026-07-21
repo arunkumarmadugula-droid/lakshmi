@@ -1,26 +1,5 @@
-const CACHE = "lakshmi-v2";
-const ASSETS = [
-  "./", "./index.html", "./manifest.json", "./icon-180.png", "./icon-512.png",
-  "https://unpkg.com/react@18.3.1/umd/react.production.min.js",
-  "https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js",
-  "https://unpkg.com/prop-types@15.8.1/prop-types.min.js",
-  "https://unpkg.com/recharts@2.12.7/umd/Recharts.js",
-  "https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"
-];
-self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then(c => Promise.allSettled(ASSETS.map(a => c.add(a)))));
-  self.skipWaiting();
-});
-self.addEventListener("activate", (e) => e.waitUntil(
-  caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => clients.claim())
-));
-self.addEventListener("fetch", (e) => {
-  if (e.request.method !== "GET") return; // never intercept AI API calls
-  e.respondWith(
-    caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
-      const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(e.request, copy)).catch(()=>{});
-      return res;
-    }).catch(() => hit))
-  );
-});
+const CACHE="lakshmi-v8-2-d07b5c77a4c9";
+const ASSETS=["./","./.nojekyll","./apple-touch-icon.png","./assets/index-DkVB7Hcn.css","./assets/index-HLT7A9xA.js","./assets/pdf-Byh4VdEU.js","./assets/pdf.worker.min-BcGIa-xv.js","./assets/pdf.worker.min-DEtVeC4l.mjs","./icon-192.png","./icon-512.png","./icon-maskable-512.png","./icon.svg","./index.html","./manifest.webmanifest","./vehicle-ratings-ca-2020-2026.json"];
+self.addEventListener("install",event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)));self.skipWaiting();});
+self.addEventListener("activate",event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith("lakshmi-")&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()));});
+self.addEventListener("fetch",event=>{if(event.request.method!=="GET")return;if(event.request.mode==="navigate"){event.respondWith(fetch(event.request).then(response=>{if(response&&response.status===200){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put("./index.html",copy)).catch(()=>{});}return response;}).catch(()=>caches.match("./index.html")));return;}event.respondWith(caches.match(event.request).then(hit=>hit||fetch(event.request).then(response=>{if(!response||response.status!==200||response.type==="opaque")return response;const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy)).catch(()=>{});return response;})).catch(()=>Response.error()));});
