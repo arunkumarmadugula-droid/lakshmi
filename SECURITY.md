@@ -13,6 +13,7 @@
 - Content Security Policy permits only same-origin assets and direct `api.openai.com` connections
 - No third-party scripts, analytics, advertising, or embedded objects
 - Backup validation, file-size bounds, and KDF-iteration bounds before import
+- AES-256-GCM household update files with sequence checkpoints, duplicate detection, and gap rejection
 
 ## API key tradeoff
 
@@ -26,6 +27,8 @@ The OpenAI API key is encrypted inside the vault and never written to source cod
 - Origin storage is shared by pages on the same host origin. A dedicated domain offers stronger isolation than multiple unrelated GitHub Pages projects under one user origin.
 - Local encryption does not replace phone encryption and a strong device passcode.
 - There is no remote passphrase reset.
+- A household invitation contains its household update key in the URL fragment. Share it privately; anyone who receives the invitation can create files encrypted for that household until the link is disabled.
+- Unencrypted Excel exports intentionally fall outside the vault's encryption boundary.
 
 ## Deployment
 

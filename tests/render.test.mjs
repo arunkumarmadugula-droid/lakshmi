@@ -29,17 +29,28 @@ test("all six tabs render from a populated encrypted-vault shape", async () => {
     vault.budgets.Groceries = 600;
     vault.creditCards.push({ id: "card", bank: "TD", name: "Visa", last4: "4218", dueDay: 27, statementDay: 5, active: true });
     vault.cardStatements.push({ id: "statement", cardId: "card", statementDate: "2026-07-05", dueDate: "2026-07-27", statementBalance: 812 });
+    vault.cardPayments.push({ id: "payment", cardId: "card", statementId: "statement", dueMonth: "2026-07", date: "2026-07-15", amount: 400 });
     vault.vehicles.push({ id: "vehicle", year: 2024, make: "Toyota", model: "RAV4", combinedRating: 7.8, tankCapacity: 55, active: true });
     vault.fuelEntries.push({ id: "fuel-a", vehicleId: "vehicle", date: "2026-07-01", odometer: 10000, litres: 40, cost: 65, station: "Costco" });
     const props = { vault, persist() {}, notify() {}, openModal() {} };
     const html = modules.map((module) => renderToString(React.createElement(module.default, props)));
     assert.equal(html.length, 6);
     assert.match(html[0], /Add a bill/i);
+    const companionAdd = renderToString(React.createElement(modules[0].default, { ...props, companion: true, currentOwner: "partner" }));
+    assert.match(companionAdd, /Card bill/i);
+    assert.doesNotMatch(companionAdd, /Payslip/i);
     assert.match(html[1], /Card bills due/i);
+    assert.equal((html[1].match(/class="chart-column chart-control"/g) || []).length, 1);
+    assert.match(html[1], /mini-bar-control chart-control/i);
     assert.match(html[2], /Credit card payments/i);
     assert.match(html[3], /Rice/i);
     assert.match(html[4], /Household income/i);
     assert.match(html[5], /Current vehicle/i);
+    const emptyVault = createEmptyVault("New household");
+    emptyVault.settings.chartStartMonth = "2026-07";
+    const emptyBoard = renderToString(React.createElement(modules[1].default, { ...props, vault: emptyVault }));
+    assert.match(emptyBoard, /aria-label="No cash-flow activity recorded since July 2026"/i);
+    assert.equal((emptyBoard.match(/class="chart-column chart-placeholder"/g) || []).length, 1);
   } finally {
     await server.close();
   }

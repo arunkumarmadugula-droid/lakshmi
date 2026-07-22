@@ -1,4 +1,5 @@
 import { createEmptyVault, normalizeVault, SCHEMA_VERSION } from "../data/defaults.js";
+import { normalizeTheme } from "./theme.js";
 import { number, todayISO, uid } from "./format.js";
 import { authenticateDeviceUnlock, registerDeviceUnlock } from "./deviceAuth.js";
 
@@ -184,6 +185,7 @@ export async function createProfile(name, passphrase, initialVault) {
   const profile = {
     id: profileId,
     name: vault.profile.name,
+    theme: normalizeTheme(vault.settings.theme),
     encryptionVersion: ENCRYPTION_VERSION,
     passphrase: await createPassphraseWrapper(rawMasterKey, passphrase),
     quickUnlock: null,
@@ -209,6 +211,7 @@ async function migrateVersionOne(profile, record, passphrase) {
   const key = await importMasterKey(rawMasterKey);
   const migratedProfile = {
     ...profile,
+    theme: normalizeTheme(vault.settings.theme),
     encryptionVersion: ENCRYPTION_VERSION,
     passphrase: await createPassphraseWrapper(rawMasterKey, passphrase),
     quickUnlock: null,
@@ -340,7 +343,7 @@ export async function saveVault(profileId, key, input, { forceSnapshot = false }
   const writeTransaction = database.transaction(["profiles", "vaults", "snapshots"], "readwrite");
   if (shouldSnapshot) writeTransaction.objectStore("snapshots").put({ id: uid("snapshot"), profileId, createdAt: now, record: previous });
   writeTransaction.objectStore("vaults").put({ profileId, ...encrypted, schemaVersion: SCHEMA_VERSION, updatedAt: now });
-  writeTransaction.objectStore("profiles").put({ ...profile, name: vault.profile.name, lastSavedAt: now, schemaVersion: SCHEMA_VERSION });
+  writeTransaction.objectStore("profiles").put({ ...profile, name: vault.profile.name, theme: normalizeTheme(vault.settings.theme), lastSavedAt: now, schemaVersion: SCHEMA_VERSION });
   await transactionDone(writeTransaction);
   const allSnapshots = await snapshotsFor(database, profileId);
   if (allSnapshots.length > 7) {
@@ -521,8 +524,8 @@ export async function buildEncryptedBackup(profileId) {
     formatVersion: profile.encryptionVersion === ENCRYPTION_VERSION ? 2 : 1,
     exportedAt: new Date().toISOString(),
     profile: profile.encryptionVersion === ENCRYPTION_VERSION
-      ? { name: profile.name, encryptionVersion: ENCRYPTION_VERSION, passphrase: profile.passphrase, schemaVersion: profile.schemaVersion }
-      : { name: profile.name, salt: profile.salt, iterations: profile.iterations, schemaVersion: profile.schemaVersion },
+      ? { name: profile.name, theme: normalizeTheme(profile.theme), encryptionVersion: ENCRYPTION_VERSION, passphrase: profile.passphrase, schemaVersion: profile.schemaVersion }
+      : { name: profile.name, theme: normalizeTheme(profile.theme), salt: profile.salt, iterations: profile.iterations, schemaVersion: profile.schemaVersion },
     vault: { iv: vault.iv, ciphertext: vault.ciphertext, schemaVersion: vault.schemaVersion, updatedAt: vault.updatedAt },
     documents: await backupDocuments(profileId),
   };
@@ -555,6 +558,7 @@ export async function importEncryptedBackup(file) {
     profile = {
       id: profileId,
       name: `${backup.profile.name || "Restored household"}`,
+      theme: normalizeTheme(backup.profile?.theme),
       encryptionVersion: ENCRYPTION_VERSION,
       passphrase,
       quickUnlock: null,
@@ -571,6 +575,7 @@ export async function importEncryptedBackup(file) {
     profile = {
       id: profileId,
       name: `${backup.profile.name || "Restored household"}`,
+      theme: normalizeTheme(backup.profile?.theme),
       salt: backup.profile.salt,
       iterations,
       createdAt: now,
@@ -661,7 +666,7 @@ export function readLegacyVault(profileName = "Imported household") {
   }
   if (!source) return null;
   const vault = createEmptyVault(profileName);
-  vault.settings.theme = source.settings?.theme === "lotus" ? "lotus" : source.settings?.theme === "forest" ? "forest" : "default";
+  vault.settings.theme = normalizeTheme(source.settings?.theme);
   vault.settings.bankBalance = number(source.settings?.bankBalance);
   vault.settings.savingsBalance = number(source.settings?.savingsBalance);
   vault.settings.balancesConfigured = !!(vault.settings.bankBalance || vault.settings.savingsBalance);
@@ -712,4 +717,3 @@ export function readLegacyVault(profileName = "Imported household") {
   vault.profile.updatedAt = new Date().toISOString();
   return vault;
 }
-

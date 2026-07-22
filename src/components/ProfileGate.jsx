@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { deviceUnlockAvailable, deviceUnlockLabel } from "../lib/deviceAuth.js";
-import { Button, Field, FileButton, Icon, Input, LotusLogo, Segmented } from "./ui.jsx";
+import { applyDocumentTheme, normalizeTheme, rememberedTheme } from "../lib/theme.js";
+import { Button, Field, FileButton, Icon, Input, LotusLogo, Segmented, Select } from "./ui.jsx";
 
 export default function ProfileGate({
   profiles,
@@ -9,16 +10,18 @@ export default function ProfileGate({
   error,
   legacyAvailable,
   legacyApiKey,
+  householdInvite,
   onUnlock,
   onQuickUnlock,
   onCreate,
   onImport,
 }) {
-  const [mode, setMode] = useState(profiles.length ? "unlock" : "create");
+  const [mode, setMode] = useState(householdInvite ? "create" : profiles.length ? "unlock" : "create");
   const [selectedId, setSelectedId] = useState(preferredProfileId || profiles[0]?.id || "");
   const [passphrase, setPassphrase] = useState("");
   const [showPassphrase, setShowPassphrase] = useState(false);
-  const [name, setName] = useState("My household");
+  const [name, setName] = useState(householdInvite?.partnerName || "My household");
+  const [country, setCountry] = useState(householdInvite?.country === "IN" ? "IN" : "CA");
   const [confirm, setConfirm] = useState("");
   const [pin, setPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
@@ -44,7 +47,12 @@ export default function ProfileGate({
   }, []);
 
   const selected = useMemo(() => profiles.find((profile) => profile.id === selectedId), [profiles, selectedId]);
+  const lockTheme = normalizeTheme(selected?.theme || rememberedTheme());
   const deviceLabel = deviceUnlockLabel();
+
+  useEffect(() => {
+    applyDocumentTheme(lockTheme, "lock");
+  }, [lockTheme]);
 
   async function submitRecovery(event) {
     event.preventDefault();
@@ -59,7 +67,7 @@ export default function ProfileGate({
   async function submitCreate(event) {
     event.preventDefault();
     if (passphrase !== confirm || (unlockMethod === "pin" && pin !== confirmPin)) return;
-    await onCreate({ name, passphrase, importLegacy, removeLegacyKey, unlockMethod, pin, storageMode, apiKey });
+    await onCreate({ name, country, passphrase, importLegacy: householdInvite ? false : importLegacy, removeLegacyKey, unlockMethod, pin, storageMode, apiKey });
   }
 
   function chooseProfile(profileId) {
@@ -76,7 +84,7 @@ export default function ProfileGate({
     || (unlockMethod === "pin" && (!/^\d{4}$/.test(pin) || pin !== confirmPin));
 
   return (
-    <main className="profile-stage">
+    <main className={`profile-stage theme-${lockTheme}`}>
       <section className="profile-panel" aria-label="Lakshmi encrypted profile">
         <div className="profile-brand">
           <LotusLogo />
@@ -134,6 +142,14 @@ export default function ProfileGate({
 
         {mode === "create" && (
           <form className="profile-form setup-form" onSubmit={submitCreate}>
+            {householdInvite && <div className="security-banner"><span className="icon-box"><Icon name="users" /></span><div><strong>Join {householdInvite.primaryName || "the household"}</strong><div className="helper">This creates a separate encrypted companion profile on this device.</div></div></div>}
+            <Field label={householdInvite ? "Household country and currency" : "Country and currency"}>
+              <Select value={country} disabled={!!householdInvite} onChange={(event) => setCountry(event.target.value)}>
+                <option value="CA">Canada (CAD)</option>
+                <option value="IN">India (INR)</option>
+              </Select>
+            </Field>
+            <div className="helper">This is locked to the profile so schedules, charts, exports, and shared household records use one currency.</div>
             <Field label="Profile name"><Input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="My household" /></Field>
             <Field label="Recovery passphrase"><Input type="password" value={passphrase} onChange={(event) => setPassphrase(event.target.value)} minLength={8} autoComplete="new-password" placeholder="At least 8 characters" /></Field>
             <Field label="Confirm passphrase"><Input type="password" value={confirm} onChange={(event) => setConfirm(event.target.value)} autoComplete="new-password" /></Field>
@@ -161,11 +177,13 @@ export default function ProfileGate({
             <Field label="OpenAI API key (optional)"><Input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value.trim())} autoComplete="off" placeholder="sk-..." /></Field>
             <div className="privacy-note">A key entered here is encrypted inside this profile. It is never committed to GitHub. Direct browser use is a personal-use security tradeoff.</div>
 
-            {legacyAvailable && <label className="check-row"><input type="checkbox" checked={importLegacy} onChange={(event) => setImportLegacy(event.target.checked)} /><span>Move existing Lakshmi records into this encrypted vault</span></label>}
+            {householdInvite && <div className="privacy-note">On Android, finish creating this profile first. Then open Linked household and choose Install app so the invitation remains attached to the correct private profile.</div>}
+
+            {legacyAvailable && !householdInvite && <label className="check-row"><input type="checkbox" checked={importLegacy} onChange={(event) => setImportLegacy(event.target.checked)} /><span>Move existing Lakshmi records into this encrypted vault</span></label>}
             {legacyApiKey && <label className="check-row"><input type="checkbox" checked={removeLegacyKey} onChange={(event) => setRemoveLegacyKey(event.target.checked)} /><span>Remove the old unencrypted API key from browser storage</span></label>}
             {error && <div className="error-text">{error}</div>}
             <Button kind="primary" disabled={createDisabled} type="submit"><Icon name="shield" />{busy ? "Creating..." : "Create encrypted profile"}</Button>
-            {profiles.length > 0 && <Button kind="ghost" compact onClick={() => setMode("unlock")}><Icon name="left" />Back to unlock</Button>}
+            {profiles.length > 0 && !householdInvite && <Button kind="ghost" compact onClick={() => setMode("unlock")}><Icon name="left" />Back to unlock</Button>}
           </form>
         )}
 

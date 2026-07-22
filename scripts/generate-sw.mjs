@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 
 const root = new URL("../dist/", import.meta.url);
 const rootPath = decodeURIComponent(root.pathname).replace(/^\/(.:\/)/, "$1");
+const packageData = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8"));
 
 async function filesUnder(dir) {
   const entries = await readdir(dir, { withFileTypes: true });
@@ -20,7 +21,7 @@ async function filesUnder(dir) {
 const files = await filesUnder(rootPath);
 const hash = createHash("sha256");
 for (const file of files) hash.update(await readFile(file));
-const cacheName = `lakshmi-v8-${hash.digest("hex").slice(0, 12)}`;
+const cacheName = `lakshmi-v${packageData.version.replaceAll(".", "-")}-${hash.digest("hex").slice(0, 12)}`;
 const assets = files.map((file) => `./${relative(rootPath, file).replaceAll("\\", "/")}`);
 assets.unshift("./");
 
@@ -28,7 +29,7 @@ const source = `const CACHE=${JSON.stringify(cacheName)};
 const ASSETS=${JSON.stringify(assets)};
 self.addEventListener("install",event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)));self.skipWaiting();});
 self.addEventListener("activate",event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith("lakshmi-")&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()));});
-self.addEventListener("fetch",event=>{if(event.request.method!=="GET")return;event.respondWith(caches.match(event.request).then(hit=>hit||fetch(event.request).then(response=>{if(!response||response.status!==200||response.type==="opaque")return response;const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy)).catch(()=>{});return response;})).catch(()=>event.request.mode==="navigate"?caches.match("./index.html"):Response.error()));});
+self.addEventListener("fetch",event=>{if(event.request.method!=="GET")return;const url=new URL(event.request.url);if(event.request.mode==="navigate"){event.respondWith(fetch(event.request).then(response=>{if(response&&response.status===200){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put("./index.html",copy)).catch(()=>{});}return response;}).catch(()=>caches.match("./index.html")));return;}if(url.pathname.endsWith("/version.json")||url.pathname.endsWith("/manifest.webmanifest")){event.respondWith(fetch(event.request).then(response=>{if(response&&response.status===200){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy)).catch(()=>{});}return response;}).catch(()=>caches.match(event.request)));return;}event.respondWith(caches.match(event.request).then(hit=>hit||fetch(event.request).then(response=>{if(!response||response.status!==200||response.type==="opaque")return response;const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy)).catch(()=>{});return response;})).catch(()=>Response.error()));});
 `;
 
 await writeFile(join(rootPath, "sw.js"), source);

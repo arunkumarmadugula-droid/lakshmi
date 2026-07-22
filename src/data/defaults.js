@@ -1,4 +1,17 @@
-export const SCHEMA_VERSION = 2;
+import { normalizeTheme } from "../lib/theme.js";
+
+export const SCHEMA_VERSION = 6;
+
+export const REGIONS = {
+  CA: { country: "CA", name: "Canada", currency: "CAD", locale: "en-CA" },
+  IN: { country: "IN", name: "India", currency: "INR", locale: "en-IN" },
+};
+
+export function normalizeCountry(value) {
+  return value === "IN" ? "IN" : "CA";
+}
+
+export const DRIVE_THROUGH_BUCKETS = ["Coffee", "Breakfast", "Quick meal", "Snacks", "Other"];
 
 export const CATEGORY_DEFINITIONS = [
   ["Housing", "#9bc7ea"],
@@ -47,24 +60,25 @@ export const BUDGET_SUBCATEGORIES = {
   Other: ["Other"],
 };
 
-export function createEmptyVault(profileName = "My household") {
+export function createEmptyVault(profileName = "My household", country = "CA") {
   const now = new Date().toISOString();
+  const region = REGIONS[normalizeCountry(country)];
   return {
     schemaVersion: SCHEMA_VERSION,
     profile: {
       name: profileName,
-      currency: "CAD",
-      locale: "en-CA",
+      currency: region.currency,
+      locale: region.locale,
       createdAt: now,
       updatedAt: now,
     },
     settings: {
       theme: "default",
+      country: region.country,
       province: "ON",
       bankBalance: 0,
       savingsBalance: 0,
       balancesConfigured: false,
-      savingsGoal: 1000,
       autoLockMinutes: 5,
       backupReminderDays: 14,
       lastExternalBackupAt: null,
@@ -72,6 +86,9 @@ export function createEmptyVault(profileName = "My household") {
       storagePersistent: false,
       backupMode: "device",
       aiMode: "direct-api",
+      chartStartMonth: now.slice(0, 7),
+      onboardingComplete: false,
+      onboardingVersion: 1,
     },
     ai: {
       apiKey: "",
@@ -80,6 +97,7 @@ export function createEmptyVault(profileName = "My household") {
       usage: [],
     },
     expenses: [],
+    refunds: [],
     incomeSources: [],
     incomeTransactions: [],
     recurringExpenses: [],
@@ -90,23 +108,74 @@ export function createEmptyVault(profileName = "My household") {
     cardStatements: [],
     cardPayments: [],
     savingsTransfers: [],
+    savingsGoals: [],
+    jointAccount: {
+      enabled: false,
+      name: "Joint account",
+      openingBalance: 0,
+      createdAt: null,
+    },
+    jointTransfers: [],
     vehicles: [],
     fuelEntries: [],
     splitReimbursements: [],
+    quickFavorites: [{
+      id: "favorite-tim-hortons",
+      name: "Tim Hortons",
+      bucket: "Coffee",
+      category: "Dining",
+      paymentMethod: "credit",
+      cardId: "",
+    }],
+    householdLink: {
+      enabled: false,
+      role: "primary",
+      householdId: "",
+      syncKey: "",
+      primaryName: profileName,
+      partnerName: "Partner",
+      linkedAt: null,
+    },
+    partnerSync: {
+      deviceId: "",
+      nextSequence: 1,
+      lastSentSequence: 0,
+      lastSentAt: null,
+      changeLog: [],
+      importedDevices: {},
+    },
   };
 }
 
 export function normalizeVault(input, profileName) {
-  const base = createEmptyVault(profileName);
   const source = input && typeof input === "object" ? input : {};
+  const country = normalizeCountry(source.settings?.country || (source.profile?.currency === "INR" ? "IN" : "CA"));
+  const region = REGIONS[country];
+  const base = createEmptyVault(profileName, country);
+  const profile = { ...base.profile, ...(source.profile || {}) };
+  const settings = { ...base.settings, ...(source.settings || {}) };
+  settings.country = country;
+  profile.currency = region.currency;
+  profile.locale = region.locale;
+  settings.theme = normalizeTheme(settings.theme);
+  const activationMonth = String(profile.createdAt || "").slice(0, 7);
+  if (!/^\d{4}-\d{2}$/.test(settings.chartStartMonth || "")) settings.chartStartMonth = /^\d{4}-\d{2}$/.test(activationMonth) ? activationMonth : base.settings.chartStartMonth;
+  if (source.schemaVersion && source.schemaVersion < 3 && source.settings?.onboardingComplete == null) settings.onboardingComplete = true;
+  const legacyGoal = Number(source.settings?.savingsGoal) || 0;
+  const savingsGoals = Array.isArray(source.savingsGoals)
+    ? source.savingsGoals
+    : legacyGoal > 0
+      ? [{ id: "legacy-emergency-fund", type: "emergency", name: "Emergency fund", target: legacyGoal, allocated: 0, targetDate: "", createdAt: source.profile?.createdAt || new Date().toISOString() }]
+      : [];
   return {
     ...base,
     ...source,
     schemaVersion: SCHEMA_VERSION,
-    profile: { ...base.profile, ...(source.profile || {}) },
-    settings: { ...base.settings, ...(source.settings || {}) },
+    profile,
+    settings,
     ai: { ...base.ai, ...(source.ai || {}) },
     expenses: Array.isArray(source.expenses) ? source.expenses : [],
+    refunds: Array.isArray(source.refunds) ? source.refunds : [],
     incomeSources: Array.isArray(source.incomeSources) ? source.incomeSources : [],
     incomeTransactions: Array.isArray(source.incomeTransactions) ? source.incomeTransactions : [],
     recurringExpenses: Array.isArray(source.recurringExpenses) ? source.recurringExpenses : [],
@@ -117,8 +186,19 @@ export function normalizeVault(input, profileName) {
     cardStatements: Array.isArray(source.cardStatements) ? source.cardStatements : [],
     cardPayments: Array.isArray(source.cardPayments) ? source.cardPayments : [],
     savingsTransfers: Array.isArray(source.savingsTransfers) ? source.savingsTransfers : [],
+    savingsGoals,
+    jointAccount: { ...base.jointAccount, ...(source.jointAccount || {}) },
+    jointTransfers: Array.isArray(source.jointTransfers) ? source.jointTransfers : [],
     vehicles: Array.isArray(source.vehicles) ? source.vehicles : [],
     fuelEntries: Array.isArray(source.fuelEntries) ? source.fuelEntries : [],
     splitReimbursements: Array.isArray(source.splitReimbursements) ? source.splitReimbursements : [],
+    quickFavorites: Array.isArray(source.quickFavorites) ? source.quickFavorites : base.quickFavorites,
+    householdLink: { ...base.householdLink, ...(source.householdLink || {}) },
+    partnerSync: {
+      ...base.partnerSync,
+      ...(source.partnerSync || {}),
+      changeLog: Array.isArray(source.partnerSync?.changeLog) ? source.partnerSync.changeLog : [],
+      importedDevices: source.partnerSync?.importedDevices && typeof source.partnerSync.importedDevices === "object" ? source.partnerSync.importedDevices : {},
+    },
   };
 }

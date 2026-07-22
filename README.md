@@ -2,6 +2,8 @@
 
 Lakshmi is an offline-first household finance PWA for iPhone and Android Home Screen use. It can be hosted as a static site on GitHub Pages; every device keeps an independent local database.
 
+First-time setup locks each profile to Canada (`CAD`, `en-CA`) or India (`INR`, `en-IN`). A linked companion inherits the primary household currency so imported records cannot mix units.
+
 ## Privacy and unlock model
 
 - Financial records, settings, AI usage, snapshots, and archived documents are encrypted with AES-256-GCM before local storage.
@@ -30,6 +32,8 @@ Requests use `store: false` and the low-cost `gpt-5.4-mini` model. Estimated tok
 
 Important: a static browser app cannot protect an API key as strongly as a backend secret store. Malicious browser extensions, injected code, or a compromised unlocked device may read the key. This client-side design is intended for personal use and is an explicit tradeoff.
 
+Receiptless purchases can be entered from Drive-through favourites on Add. Merchant, broad bucket, category, and usual payment method are remembered, while the amount always begins blank.
+
 ## Local storage and backup
 
 - The live vault uses encrypted IndexedDB plus encrypted Origin Private File System storage when supported.
@@ -41,14 +45,31 @@ Important: a static browser app cannot protect an API key as strongly as a backe
 
 Clearing website data, deleting the Home Screen app, or storage pressure can remove the local database. Keep a recent external encrypted backup.
 
+An unencrypted `.xlsx` export is available for portability. It includes financial tables but excludes the API key and archived receipt files. Treat that workbook as sensitive.
+
+## Linked household companion
+
+- The primary profile creates a private invitation from the household button beside Settings.
+- The invitation opens a separate encrypted companion profile on the partner's device.
+- The companion has focused Add, Board, and Ledger tabs and manually chooses **Send updates now**.
+- The companion Add tab accepts both receipts and credit-card statements; statement due dates, payment history, and card ownership synchronize separately from spending.
+- On Android, open the invitation in Chrome, complete the encrypted profile, then choose **Install** in Linked household or Chrome's **Add to Home screen > Install** menu.
+- Each encrypted incremental file contains only additions, edits, refunds, split repayments, and deletions since the previous successful send.
+- Imports are duplicate-safe. A sequence gap is rejected instead of silently losing data, and the companion can send a full resync for recovery.
+- There is no shared server or automatic background synchronization. Receipt images remain on the device that captured them; the shared file carries ledger records only.
+
 ## Accounting rules
 
 - Receipt expenses count in `SPENT`, including purchases made on credit.
+- Refunds reduce the related purchase and category. Credit-card refunds never become income or card payments.
 - A credit-card statement creates reminders and a ledger record, but never a duplicate expense.
+- Statement transactions are matched against existing receipts; unmatched debits or credits affect totals only after review.
 - Paying a card reduces bank balance and stays separate from `SPENT`.
 - Bill-split repayments reduce the original expense category and are not counted as income.
 - `SAVED` equals recorded inflow minus net recorded expenses for the selected month.
 - Income schedules begin from the first expected date and can move a selected share to savings.
+- Dated salary-rate changes affect unposted deposits from their effective date; one-time bonuses do not change the recurring rate.
+- Budget detail lines roll into their parent category totals.
 
 ## Run and verify
 

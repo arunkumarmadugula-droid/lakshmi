@@ -74,7 +74,9 @@ export default function FuelTab({ vault, persist, notify, openModal }) {
         <CardHeader label="Fuel history" helper={`${metrics.entries.length} fill-up${metrics.entries.length === 1 ? "" : "s"}`} />
         {metrics.entries.length ? [...metrics.entries].reverse().map((entry) => {
           const trip = metrics.trips.find((item) => item.id === entry.id);
-          return <div className="row with-icon" key={entry.id}><span className="icon-box"><Icon name="fuel" /></span><span className="truncate"><strong>{entry.station || "Fuel"}</strong><br /><span className="helper">{entry.date} - {entry.octane || "Regular"} - {number(entry.odometer).toLocaleString("en-CA")} km</span></span><span className="row-actions"><strong className="money">{trip ? `${trip.economy.toFixed(1)} L/100` : money(entry.cost)}</strong><IconButton icon="trash" label="Delete fill-up" className="danger" onClick={() => removeFill(entry)} /></span></div>;
+          const litres = number(entry.litres);
+          const unitPrice = litres > 0 ? number(entry.cost) / litres : 0;
+          return <div className="row with-icon" key={entry.id}><span className="icon-box"><Icon name="fuel" /></span><span className="truncate"><strong>{entry.station || "Fuel"}</strong><br /><span className="helper">{entry.date} - {entry.octane || "Regular"} - {number(entry.odometer).toLocaleString("en-CA")} km</span><br /><span className="helper">{litres.toFixed(2)} L at {money(unitPrice)}/L - {money(entry.cost)} total</span></span><span className="row-actions"><strong className="money">{trip ? `${trip.economy.toFixed(1)} L/100` : "First fill"}</strong><IconButton icon="trash" label="Delete fill-up" className="danger" onClick={() => removeFill(entry)} /></span></div>;
         }) : <div className="helper">Add two full-tank fill-ups to calculate observed fuel economy.</div>}
       </Card>
     </>

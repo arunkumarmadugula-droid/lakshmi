@@ -163,6 +163,24 @@ export function monthlyEquivalent(amount, frequency) {
   return periods ? (number(amount) * periods) / 12 : 0;
 }
 
+export function ownerMatches(record, scope = "household") {
+  if (scope === "household" || !scope) return true;
+  const owner = record?.owner || "me";
+  if (scope === "partner") return owner === "partner" || owner === "spouse";
+  return owner !== "partner" && owner !== "spouse" && owner !== "household";
+}
+
+export function salaryVersionOnDate(source, date = todayISO()) {
+  const versions = Array.isArray(source?.salaryHistory) ? source.salaryHistory : [];
+  return versions
+    .filter((item) => !item.effectiveDate || item.effectiveDate <= date)
+    .sort((a, b) => String(b.effectiveDate || "").localeCompare(String(a.effectiveDate || "")))[0] || null;
+}
+
+export function incomeAmountOnDate(source, date = todayISO()) {
+  return number(salaryVersionOnDate(source, date)?.amount ?? source?.amount);
+}
+
 export function applyDueSchedules(input, throughDate = todayISO()) {
   const vault = structuredClone(input);
   let changed = false;
@@ -178,10 +196,10 @@ export function applyDueSchedules(input, throughDate = todayISO()) {
       for (const date of occurrencesInMonth(source, cursorMonth).filter((value) => value <= throughDate)) {
         const exists = vault.incomeTransactions.some((item) => item.sourceId === source.id && item.date === date);
         if (exists) continue;
-        const amount = number(source.amount);
+        const amount = incomeAmountOnDate(source, date);
         const savings = Math.max(0, Math.min(amount, amount * (number(source.savingsPercent) / 100)));
         vault.incomeTransactions.unshift({
-          id: uid("income"), sourceId: source.id, name: source.name || "Income", owner: source.owner || "household",
+          id: uid("income"), sourceId: source.id, name: source.name || "Income", owner: source.owner || "me",
           amount, savings, date, source: "schedule", createdAt: new Date().toISOString(),
         });
         vault.settings.bankBalance += amount - savings;
@@ -198,6 +216,7 @@ export function applyDueSchedules(input, throughDate = todayISO()) {
           id: uid("expense"), recurringId: recurring.id, store: recurring.name || "Recurring expense",
           date, category: recurring.category || "Other", subtotal: total, tax: 0, total, items: [],
           paymentMethod: recurring.paymentMethod || "bank", cardId: recurring.cardId || "", source: "recurring",
+          owner: recurring.owner || "me",
           createdAt: new Date().toISOString(),
         });
         if ((recurring.paymentMethod || "bank") !== "credit") vault.settings.bankBalance -= total;
@@ -210,20 +229,29 @@ export function applyDueSchedules(input, throughDate = todayISO()) {
   return { vault, changed };
 }
 
-export function monthStats(vault, month) {
-  const expenses = vault.expenses.filter((item) => monthKey(item.date) === month && !item.excludeFromSpent);
-  const incomeTransactions = vault.incomeTransactions.filter((item) => monthKey(item.date) === month);
-  const cardPayments = vault.cardPayments.filter((item) => monthKey(item.date) === month);
+export function monthStats(vault, month, scope = "household") {
+  const expenses = vault.expenses.filter((item) => monthKey(item.date) === month && !item.excludeFromSpent && ownerMatches(item, scope));
+  const incomeTransactions = vault.incomeTransactions.filter((item) => monthKey(item.date) === month && ownerMatches(item, scope));
+  const cardPayments = vault.cardPayments.filter((item) => monthKey(item.date) === month && ownerMatches(item, scope));
+  const refunds = (vault.refunds || []).filter((item) => ownerMatches(item, scope));
+  const unlinkedRefunds = refunds.filter((item) => !item.originalExpenseId && monthKey(item.effectiveDate || item.date) === month);
   const income = incomeTransactions.reduce((sum, item) => sum + number(item.amount), 0);
-  const spent = expenses.reduce((sum, item) => sum + expenseNetAmount(vault, item), 0);
+  const grossSpent = expenses.reduce((sum, item) => sum + number(item.total), 0);
+  const expenseSpend = expenses.reduce((sum, item) => sum + expenseNetAmount(vault, item), 0);
+  const unlinkedRefundTotal = unlinkedRefunds.reduce((sum, item) => sum + number(item.amount), 0);
+  const spent = Math.max(0, Math.round((expenseSpend - unlinkedRefundTotal) * 100) / 100);
   const payments = cardPayments.reduce((sum, item) => sum + number(item.amount), 0);
   const saved = income - spent;
   const categoryMap = {};
   for (const item of expenses) categoryMap[item.category || "Other"] = (categoryMap[item.category || "Other"] || 0) + expenseNetAmount(vault, item);
+  for (const item of unlinkedRefunds) categoryMap[item.category || "Other"] = (categoryMap[item.category || "Other"] || 0) - number(item.amount);
   const categories = Object.entries(categoryMap)
-    .map(([name, value]) => ({ name, value, color: CATEGORY_COLORS[name] || CATEGORY_COLORS.Other, percent: spent ? (value / spent) * 100 : 0 }))
+    .filter(([, value]) => value > 0.005)
+    .map(([name, value]) => ({ name, value, color: CATEGORY_COLORS[name] || CATEGORY_COLORS.Other, percent: spent > 0 ? (value / spent) * 100 : 0 }))
     .sort((a, b) => b.value - a.value);
-  return { expenses, incomeTransactions, cardPayments, income, spent, saved, payments, categories };
+  const refundsRecorded = refunds.filter((item) => monthKey(item.date) === month);
+  const refundTotal = refundsRecorded.reduce((sum, item) => sum + number(item.amount), 0);
+  return { expenses, refunds: refundsRecorded, incomeTransactions, cardPayments, income, grossSpent, refundTotal, spent, saved, payments, categories };
 }
 
 export function splitReceived(vault, expenseId) {
@@ -232,8 +260,19 @@ export function splitReceived(vault, expenseId) {
     .reduce((sum, item) => sum + number(item.amount), 0);
 }
 
+export function refundReceived(vault, expenseId) {
+  return (vault.refunds || [])
+    .filter((item) => item.originalExpenseId === expenseId)
+    .reduce((sum, item) => sum + number(item.amount), 0);
+}
+
 export function expenseNetAmount(vault, expense) {
-  return Math.max(0, number(expense.total) - splitReceived(vault, expense.id));
+  return Math.max(0, number(expense.total) - splitReceived(vault, expense.id) - refundReceived(vault, expense.id));
+}
+
+export function expenseRefundStatus(vault, expense) {
+  const refunded = refundReceived(vault, expense.id);
+  return { refunded, remaining: Math.max(0, number(expense.total) - refunded) };
 }
 
 export function expenseSplitStatus(vault, expense) {
@@ -243,15 +282,51 @@ export function expenseSplitStatus(vault, expense) {
   return { count, expected, received, remaining: Math.max(0, expected - received) };
 }
 
-export function history(vault, endMonth = currentMonth(), count = 6) {
+export function history(vault, endMonth = currentMonth(), count = 6, scope = "household") {
   return Array.from({ length: count }, (_, index) => {
     const month = shiftMonth(endMonth, index - count + 1);
-    return { month, ...monthStats(vault, month) };
+    return { month, ...monthStats(vault, month, scope) };
   });
 }
 
-export function dueCards(vault, month) {
-  return vault.creditCards.filter((card) => card.active !== false).map((card) => {
+export function chartStartMonth(vault, fallback = currentMonth()) {
+  const configured = monthKey(vault?.settings?.chartStartMonth);
+  if (/^\d{4}-\d{2}$/.test(configured)) return configured;
+  const created = monthKey(vault?.profile?.createdAt);
+  return /^\d{4}-\d{2}$/.test(created) ? created : fallback;
+}
+
+export function availableHistory(vault, endMonth = currentMonth(), count = 6, scope = "household") {
+  const months = new Set();
+  const firstMonth = chartStartMonth(vault, endMonth);
+  const collect = (record) => {
+    const month = monthKey(record?.date);
+    if (/^\d{4}-\d{2}$/.test(month) && month >= firstMonth && month <= endMonth && ownerMatches(record, scope)) months.add(month);
+  };
+  for (const expense of vault.expenses || []) {
+    if (!expense.excludeFromSpent) collect(expense);
+  }
+  for (const income of vault.incomeTransactions || []) collect(income);
+  return [...months]
+    .sort()
+    .map((month) => ({ month, ...monthStats(vault, month, scope) }))
+    .filter((item) => item.income > 0.005 || item.spent > 0.005)
+    .slice(-Math.max(1, count));
+}
+
+export function cardPaymentMonths(vault, endMonth = currentMonth(), count = 6, scope = "household") {
+  const cardIds = new Set((vault.creditCards || []).filter((card) => ownerMatches(card, scope)).map((card) => card.id));
+  const firstMonth = chartStartMonth(vault, endMonth);
+  return [...new Set((vault.cardPayments || [])
+    .filter((payment) => cardIds.has(payment.cardId) && number(payment.amount) > 0.005)
+    .map((payment) => monthKey(payment.date))
+    .filter((month) => /^\d{4}-\d{2}$/.test(month) && month >= firstMonth && month <= endMonth))]
+    .sort()
+    .slice(-Math.max(1, count));
+}
+
+export function dueCards(vault, month, scope = "household") {
+  return vault.creditCards.filter((card) => card.active !== false && ownerMatches(card, scope)).map((card) => {
     const statements = vault.cardStatements.filter((item) => item.cardId === card.id).sort((a, b) => b.statementDate.localeCompare(a.statementDate));
     const statement = statements.find((item) => monthKey(item.dueDate) === month);
     const latest = statements[0];
@@ -263,8 +338,10 @@ export function dueCards(vault, month) {
       (item.cardId === card.id && item.dueMonth === month),
     );
     const paidAmount = payments.reduce((sum, item) => sum + number(item.amount), 0);
+    const credits = (vault.refunds || []).filter((item) => item.refundMethod === "credit" && item.cardId === card.id && monthKey(item.date) === month);
+    const creditAmount = credits.reduce((sum, item) => sum + number(item.amount), 0);
     const paid = amount == null ? paidAmount > 0 : paidAmount >= amount - 0.005;
-    return { card, statement, latest, dueDate, amount, payments, payment: payments[0], paidAmount, paid };
+    return { card, statement, latest, dueDate, amount, payments, payment: payments[0], paidAmount, credits, creditAmount, paid };
   }).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 }
 
@@ -272,7 +349,7 @@ export function calendarEvents(vault, month) {
   const events = [];
   for (const source of vault.incomeSources.filter((item) => item.active !== false)) {
     for (const date of occurrencesInMonth(source, month)) {
-      events.push({ id: `income-${source.id}-${date}`, date, type: "in", name: source.name || "Income", amount: number(source.amount), projected: !vault.incomeTransactions.some((item) => item.sourceId === source.id && item.date === date) });
+      events.push({ id: `income-${source.id}-${date}`, date, type: "in", name: source.name || "Income", amount: incomeAmountOnDate(source, date), projected: !vault.incomeTransactions.some((item) => item.sourceId === source.id && item.date === date) });
     }
   }
   for (const item of vault.recurringExpenses.filter((entry) => entry.active !== false)) {
@@ -286,13 +363,88 @@ export function calendarEvents(vault, month) {
   return events.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export function budgetActuals(vault, month) {
-  const stats = monthStats(vault, month);
-  return Object.entries(vault.budgets).map(([category, budget]) => ({
+export function budgetCategoryTotal(vault, category) {
+  const items = (vault.budgetItems || []).filter((item) => item.category === category);
+  if (items.length) return items.reduce((sum, item) => sum + number(item.amount), 0);
+  return number(vault.budgets?.[category]);
+}
+
+export function totalBudgetAmount(vault) {
+  const categories = new Set([...Object.keys(vault.budgets || {}), ...(vault.budgetItems || []).map((item) => item.category)]);
+  return [...categories].reduce((sum, category) => sum + budgetCategoryTotal(vault, category), 0);
+}
+
+export function budgetActuals(vault, month, scope = "household") {
+  const stats = monthStats(vault, month, scope);
+  const categories = new Set([...Object.keys(vault.budgets || {}), ...(vault.budgetItems || []).map((item) => item.category)]);
+  return [...categories].map((category) => ({
     category,
-    budget: number(budget),
+    budget: budgetCategoryTotal(vault, category),
     actual: stats.categories.find((entry) => entry.name === category)?.value || 0,
-  })).sort((a, b) => b.budget - a.budget);
+  })).filter((item) => item.budget > 0 || item.actual > 0).sort((a, b) => b.budget - a.budget);
+}
+
+export function jointAccountBalance(vault) {
+  const opening = number(vault.jointAccount?.openingBalance);
+  return (vault.jointTransfers || []).reduce((balance, transfer) => {
+    const amount = Math.max(0, number(transfer.amount));
+    return balance + (transfer.direction === "from-joint" ? -amount : amount);
+  }, opening);
+}
+
+export function totalSavingsAllocated(vault, excludeGoalId = "") {
+  return (vault.savingsGoals || [])
+    .filter((goal) => goal.id !== excludeGoalId)
+    .reduce((sum, goal) => sum + Math.max(0, number(goal.allocated)), 0);
+}
+
+function dayDistance(first, second) {
+  const a = Date.parse(`${first}T12:00:00Z`);
+  const b = Date.parse(`${second}T12:00:00Z`);
+  return Number.isFinite(a) && Number.isFinite(b) ? Math.abs(a - b) / 86400000 : Infinity;
+}
+
+function merchantWords(value) {
+  return new Set(String(value || "").toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((word) => word.length > 2 && !["purchase", "payment", "refund", "credit", "debit", "card"].includes(word)));
+}
+
+function merchantOverlap(first, second) {
+  const a = merchantWords(first);
+  const b = merchantWords(second);
+  if (!a.size || !b.size) return 0;
+  return [...a].filter((word) => b.has(word)).length / Math.max(a.size, b.size);
+}
+
+export function reconcileCardTransactions(vault, cardId, transactions = []) {
+  return transactions.map((transaction) => {
+    const direction = transaction.direction === "credit" ? "credit" : "debit";
+    const source = direction === "credit" ? (vault.refunds || []) : vault.expenses;
+    const candidates = source.filter((record) => {
+      if (Math.abs(number(record.amount ?? record.total) - number(transaction.amount)) > 0.02) return false;
+      if (dayDistance(record.date, transaction.date) > 3) return false;
+      if (record.cardId && cardId && record.cardId !== cardId) return false;
+      if (direction === "credit") return record.refundMethod === "credit";
+      return record.paymentMethod === "credit";
+    }).map((record) => ({ record, score: merchantOverlap(transaction.description, record.store) * 10 - dayDistance(record.date, transaction.date) }));
+    candidates.sort((a, b) => b.score - a.score);
+    const match = candidates.length === 1 || (candidates[0] && candidates[0].score > (candidates[1]?.score ?? -Infinity)) ? candidates[0]?.record : null;
+    return {
+      id: transaction.id || uid("statement-transaction"),
+      date: transaction.date || "",
+      description: transaction.description || "Card transaction",
+      amount: Math.abs(number(transaction.amount)),
+      direction,
+      status: match ? "matched" : "unmatched",
+      matchedRecordId: match?.id || "",
+    };
+  });
+}
+
+export function unmatchedStatementTransactions(vault) {
+  return vault.cardStatements.flatMap((statement) => (statement.transactions || [])
+    .filter((transaction) => transaction.status === "unmatched")
+    .map((transaction) => ({ ...transaction, statementId: statement.id, cardId: statement.cardId, statementDate: statement.statementDate }))
+  ).sort((a, b) => String(b.date).localeCompare(String(a.date)));
 }
 
 export function fuelMetrics(vault, vehicleId) {
@@ -352,9 +504,9 @@ export function priceComparisons(vault, category = "All") {
   }).filter((item) => item.stores.length > 1).sort((a, b) => b.savings - a.savings);
 }
 
-export function localInsights(vault, month) {
-  const current = monthStats(vault, month);
-  const previous = monthStats(vault, shiftMonth(month, -1));
+export function localInsights(vault, month, scope = "household") {
+  const current = monthStats(vault, month, scope);
+  const previous = monthStats(vault, shiftMonth(month, -1), scope);
   const output = [];
   const top = current.categories[0];
   if (top) output.push(`${top.name} is your largest category at ${Math.round(top.percent)}% of recorded spending.`);

@@ -1,15 +1,8 @@
 import { CATEGORIES } from "../data/defaults.js";
-import { number, todayISO, uid } from "./format.js";
+import { dateDMY, normalizeDate, normalizeDateResult, number, todayISO, uid } from "./format.js";
 
 function parseDate(text) {
-  const iso = text.match(/\b(20\d{2})[-/.](0?[1-9]|1[0-2])[-/.](0?[1-9]|[12]\d|3[01])\b/);
-  if (iso) return `${iso[1]}-${String(iso[2]).padStart(2, "0")}-${String(iso[3]).padStart(2, "0")}`;
-  const named = text.match(/\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2}),?\s+(20\d{2})\b/i);
-  if (named) {
-    const month = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].indexOf(named[1].slice(0, 3).toLowerCase()) + 1;
-    return `${named[3]}-${String(month).padStart(2, "0")}-${String(named[2]).padStart(2, "0")}`;
-  }
-  return todayISO();
+  return normalizeDate(text, { fallback: todayISO(), reference: todayISO() });
 }
 
 function amountAfter(text, labels) {
@@ -41,6 +34,7 @@ function receiptDraft(text = "") {
   }).slice(0, 30);
   return {
     kind: "receipt",
+    transactionType: /\b(refund|returned|return receipt|credit issued)\b/i.test(text) ? "refund" : "expense",
     store: likelyStore(lines),
     date: parseDate(text),
     category: /fuel|gasoline|litres|liter|octane/i.test(text) ? "Fuel" : "Groceries",
@@ -50,6 +44,7 @@ function receiptDraft(text = "") {
     discount: amountAfter(text, ["discount", "coupon", "savings"]),
     total,
     paymentMethod: "bank",
+    originalReceiptNumber: "",
     cardId: "",
     items,
     warnings: [],
@@ -102,6 +97,7 @@ function cardDraft(text = "") {
     dueDate: parseDate(dueContext),
     statementBalance: amountAfter(text, ["new balance", "closing balance", "statement balance", "total balance"]),
     minimumPayment: amountAfter(text, ["minimum payment", "minimum amount due"]),
+    transactions: [],
     warnings: [],
   };
 }
@@ -207,7 +203,15 @@ export async function prepareDocument(file, kind) {
   };
 }
 
-export function parseAiResult(value, kind) {
+function dateWarnings(results) {
+  return results.flatMap(({ label, result }) => {
+    if (result.corrected) return [`${label} was corrected from "${result.original}" to ${dateDMY(result.date)}. Confirm it before saving.`];
+    if (result.invalid) return [`${label} could not be read. ${dateDMY(result.date)} is selected; confirm it before saving.`];
+    return [];
+  });
+}
+
+export function parseAiResult(value, kind, { referenceDate = todayISO() } = {}) {
   let parsed = value;
   if (typeof value === "string") {
     const clean = String(value || "").replace(/```json|```/gi, "").trim();
@@ -217,31 +221,53 @@ export function parseAiResult(value, kind) {
       throw new Error("The AI result is not valid JSON.");
     }
   }
+  if (!parsed || typeof parsed !== "object") parsed = {};
   const base = blankDraft(kind);
   if (kind === "receipt") {
+    const receiptDate = normalizeDateResult(parsed.date, { fallback: todayISO(), reference: referenceDate });
     return {
       ...base,
       ...parsed,
       kind,
-      date: parsed.date || todayISO(),
+      transactionType: ["expense", "refund", "uncertain"].includes(parsed.transactionType) ? parsed.transactionType : "uncertain",
+      date: receiptDate.date,
       category: CATEGORIES.includes(parsed.category) ? parsed.category : "Other",
       subtotal: number(parsed.subtotal), tax: number(parsed.tax), tip: number(parsed.tip), discount: number(parsed.discount), total: number(parsed.total),
-      warnings: Array.isArray(parsed.warnings) ? parsed.warnings.map(String) : [],
+      warnings: [...(Array.isArray(parsed.warnings) ? parsed.warnings.map(String) : []), ...dateWarnings([{ label: "Receipt date", result: receiptDate }])],
       items: Array.isArray(parsed.items) ? parsed.items.map((item) => ({ id: uid("item"), name: item.name || "", qty: number(item.qty) || 1, unit: item.unit || "ea", lineTotal: number(item.lineTotal) })) : [],
     };
   }
   if (kind === "payslip") {
+    const payDate = normalizeDateResult(parsed.payDate, { fallback: todayISO(), reference: referenceDate });
     return {
       ...base, ...parsed, kind,
+      payDate: payDate.date,
+      periodStart: normalizeDate(parsed.periodStart, { fallback: "", reference: referenceDate }),
+      periodEnd: normalizeDate(parsed.periodEnd, { fallback: "", reference: referenceDate }),
       grossPay: number(parsed.grossPay), netPay: number(parsed.netPay), ytdGross: number(parsed.ytdGross), ytdNet: number(parsed.ytdNet),
       deductions: Array.isArray(parsed.deductions) ? parsed.deductions.map((item) => ({ id: uid("deduction"), name: item.name || "", amount: number(item.amount), ytd: number(item.ytd), direction: item.direction === "in" ? "in" : "out" })) : [],
-      warnings: Array.isArray(parsed.warnings) ? parsed.warnings.map(String) : [],
+      warnings: [...(Array.isArray(parsed.warnings) ? parsed.warnings.map(String) : []), ...dateWarnings([{ label: "Pay date", result: payDate }])],
     };
   }
+  const statementDate = normalizeDateResult(parsed.statementDate, { fallback: todayISO(), reference: referenceDate });
+  const dueDate = normalizeDateResult(parsed.dueDate, { fallback: todayISO(), reference: referenceDate });
+  let transactionDateCorrected = false;
+  const transactions = Array.isArray(parsed.transactions) ? parsed.transactions.map((item) => {
+    const transactionDate = normalizeDateResult(item.date, { fallback: "", reference: referenceDate });
+    transactionDateCorrected ||= transactionDate.corrected;
+    return { id: uid("statement-transaction"), date: transactionDate.date, description: item.description || "Card transaction", amount: Math.abs(number(item.amount)), direction: item.direction === "credit" ? "credit" : "debit" };
+  }) : [];
   return {
     ...base, ...parsed, kind,
+    statementDate: statementDate.date,
+    dueDate: dueDate.date,
     last4: String(parsed.last4 || "").replace(/\D/g, "").slice(-4),
     statementBalance: number(parsed.statementBalance), minimumPayment: number(parsed.minimumPayment),
-    warnings: Array.isArray(parsed.warnings) ? parsed.warnings.map(String) : [],
+    transactions,
+    warnings: [
+      ...(Array.isArray(parsed.warnings) ? parsed.warnings.map(String) : []),
+      ...dateWarnings([{ label: "Statement date", result: statementDate }, { label: "Due date", result: dueDate }]),
+      ...(transactionDateCorrected ? ["One or more transaction dates were corrected. Confirm them before saving."] : []),
+    ],
   };
 }

@@ -29,9 +29,15 @@ OpenAI processing is governed by the user's OpenAI account and API terms. Lakshm
 
 Portable `.lakshmi` files contain encrypted vault and document ciphertext plus the recovery-key wrapper. The operating-system share sheet controls whether a backup is saved to Files, iCloud Drive, Google Drive, or another provider. Quick biometric/PIN unlock data is never included.
 
+Excel exports are deliberately unencrypted for portability. They contain financial tables but exclude API keys and archived documents. The user controls their destination through the system share sheet.
+
+## Linked household updates
+
+The optional companion workflow has no synchronization server. A private invitation creates a separate encrypted profile on another device. Companion update files are encrypted for that household and contain changed expenses, refunds, split repayments, and deletion records. They do not contain API keys, income, balances, archived photos, PDFs, or quick-unlock material. The primary user explicitly imports each file.
+
 ## Separate users
 
-Opening the same public URL on another phone creates an independent database. Multiple profiles on one browser use separate master keys, wrappers, records, snapshots, and document namespaces. No application-owned service combines user data.
+Opening the same public URL on another phone creates an independent database. Multiple profiles on one browser use separate master keys, wrappers, records, snapshots, and document namespaces. No application-owned service combines user data; linked-household records move only through the user-controlled encrypted update workflow.
 
 ## Deletion
 

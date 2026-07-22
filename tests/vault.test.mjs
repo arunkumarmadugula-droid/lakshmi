@@ -36,6 +36,7 @@ test("encrypted profiles unlock, reject a wrong passphrase, and restore as isola
   } = await import("../src/lib/vaultDb.js");
 
   const created = await createProfile("Secure household", "correct horse battery staple");
+  created.vault.settings.theme = "bright";
   created.vault.expenses.push({ id: "private-expense", store: "Private store", date: "2026-07-09", category: "Other", total: 42 });
   await saveVault(created.profile.id, created.key, created.vault, { forceSnapshot: true });
 
@@ -67,6 +68,7 @@ test("encrypted profiles unlock, reject a wrong passphrase, and restore as isola
   const { file } = await buildEncryptedBackup(created.profile.id);
   const portableBackup = JSON.parse(await file.text());
   assert.equal(portableBackup.profile.quickUnlock, undefined);
+  assert.equal(portableBackup.profile.theme, "bright");
   assert.equal(portableBackup.documents.length, 1);
   const restoredProfile = await importEncryptedBackup(file);
   const profiles = await listProfiles();
@@ -75,6 +77,7 @@ test("encrypted profiles unlock, reject a wrong passphrase, and restore as isola
   const restored = await unlockProfile(restoredProfile.id, "correct horse battery staple");
   assert.equal(restored.vault.expenses[0].id, "private-expense");
   assert.equal(restoredProfile.quickUnlock, null);
+  assert.equal(restoredProfile.theme, "bright");
 
   const unsafeBackup = new File([JSON.stringify({
     format: "lakshmi-encrypted-backup",

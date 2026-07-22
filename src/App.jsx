@@ -3,6 +3,9 @@ import ProfileGate from "./components/ProfileGate.jsx";
 import Shell from "./components/Shell.jsx";
 import { createEmptyVault } from "./data/defaults.js";
 import { applyDueSchedules } from "./lib/finance.js";
+import { applyFormattingPreferences } from "./lib/format.js";
+import { acceptHouseholdInvite, readHouseholdInvite } from "./lib/partnerSync.js";
+import { applyDocumentTheme, normalizeTheme, rememberedTheme } from "./lib/theme.js";
 import {
   clearLegacyApiKey,
   configureQuickUnlock,
@@ -19,6 +22,7 @@ import {
 } from "./lib/vaultDb.js";
 
 export default function App() {
+  const [householdInvite, setHouseholdInvite] = useState(() => readHouseholdInvite());
   const [profiles, setProfiles] = useState([]);
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -39,6 +43,7 @@ export default function App() {
     const scheduled = applyDueSchedules(result.vault);
     let vault = scheduled.vault;
     if (scheduled.changed) vault = await saveVault(result.profile.id, result.key, vault);
+    applyFormattingPreferences(vault.profile);
     setSession({ ...result, vault, notice });
     setError("");
   }
@@ -67,11 +72,13 @@ export default function App() {
     }
   }
 
-  async function handleCreate({ name, passphrase, importLegacy, removeLegacyKey, unlockMethod, pin, storageMode, apiKey }) {
+  async function handleCreate({ name, country, passphrase, importLegacy, removeLegacyKey, unlockMethod, pin, storageMode, apiKey }) {
     setBusy(true);
     setError("");
     try {
-      const initialVault = importLegacy ? readLegacyVault(name) : createEmptyVault(name);
+      const selectedCountry = householdInvite?.country || country || "CA";
+      let initialVault = importLegacy && !householdInvite ? readLegacyVault(name) : createEmptyVault(name, selectedCountry);
+      if (householdInvite) initialVault = acceptHouseholdInvite(initialVault, householdInvite);
       initialVault.settings.backupMode = storageMode || "device";
       initialVault.ai.apiKey = String(apiKey || "").trim();
       initialVault.ai.consentAt = initialVault.ai.apiKey ? new Date().toISOString() : null;
@@ -85,6 +92,10 @@ export default function App() {
       if (removeLegacyKey) clearLegacyApiKey();
       await refreshProfiles();
       await openSession(result, notice);
+      if (householdInvite) {
+        if (window.location.hash) window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+        setHouseholdInvite(null);
+      }
     } catch (reason) {
       setError(reason.message || "Unable to create the encrypted profile.");
     } finally {
@@ -106,8 +117,18 @@ export default function App() {
     }
   }
 
+  function handleLock(theme) {
+    const lockTheme = normalizeTheme(theme || session?.vault?.settings?.theme || rememberedTheme());
+    if (session?.profile?.id) {
+      setProfiles((current) => current.map((profile) => profile.id === session.profile.id ? { ...profile, theme: lockTheme } : profile));
+    }
+    applyDocumentTheme(lockTheme, "lock");
+    setSession(null);
+    refreshProfiles().catch((reason) => setError(reason.message || "Unable to refresh local profiles."));
+  }
+
   if (loading) {
-    return <main className="profile-stage"><section className="profile-panel"><div className="profile-brand"><div className="profile-title">Lakshmi</div><div className="helper">Opening local vault...</div></div></section></main>;
+    return <main className={`profile-stage theme-${rememberedTheme()}`}><section className="profile-panel"><div className="profile-brand"><div className="profile-title">Lakshmi</div><div className="helper">Opening local vault...</div></div></section></main>;
   }
 
   if (!session) {
@@ -119,6 +140,7 @@ export default function App() {
         error={error}
         legacyAvailable={legacyDataAvailable()}
         legacyApiKey={legacyApiKeyAvailable()}
+        householdInvite={householdInvite}
         onUnlock={handleUnlock}
         onQuickUnlock={handleQuickUnlock}
         onCreate={handleCreate}
@@ -130,7 +152,7 @@ export default function App() {
   return (
     <Shell
       session={session}
-      onLock={() => setSession(null)}
+      onLock={handleLock}
       onProfileChange={async () => {
         await refreshProfiles();
         setSession(null);

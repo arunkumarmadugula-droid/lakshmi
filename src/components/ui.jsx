@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Clipboard,
   Cloud,
+  Coffee,
   Copy,
   CreditCard,
   Database,
@@ -21,6 +22,7 @@ import {
   EyeOff,
   Fingerprint,
   FileText,
+  FileSpreadsheet,
   Fuel,
   Gauge,
   HardDrive,
@@ -29,6 +31,7 @@ import {
   KeyRound,
   LayoutDashboard,
   List,
+  Link2,
   Lock,
   LogOut,
   MapPin,
@@ -38,6 +41,7 @@ import {
   Plus,
   ReceiptText,
   RotateCcw,
+  RefreshCw,
   Save,
   Scale,
   ScanFace,
@@ -68,6 +72,7 @@ const ICONS = {
   right: ChevronRight,
   clipboard: Clipboard,
   cloud: Cloud,
+  coffee: Coffee,
   copy: Copy,
   card: CreditCard,
   database: Database,
@@ -77,6 +82,7 @@ const ICONS = {
   "eye-off": EyeOff,
   fingerprint: Fingerprint,
   file: FileText,
+  spreadsheet: FileSpreadsheet,
   fuel: Fuel,
   gauge: Gauge,
   drive: HardDrive,
@@ -85,6 +91,7 @@ const ICONS = {
   key: KeyRound,
   board: LayoutDashboard,
   list: List,
+  link: Link2,
   lock: Lock,
   logout: LogOut,
   map: MapPin,
@@ -94,6 +101,7 @@ const ICONS = {
   plus: Plus,
   ledger: ReceiptText,
   restore: RotateCcw,
+  sync: RefreshCw,
   save: Save,
   prices: Scale,
   face: ScanFace,
@@ -117,15 +125,13 @@ export function Icon({ name, size = 16, strokeWidth = 1.8, ...props }) {
 
 export function LotusLogo() {
   return (
-    <span className="lotus-mark" aria-label="Lakshmi golden lotus">
+    <span className="lotus-mark" role="img" aria-label="Lakshmi prosperity lotus">
       <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
-        <g stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M32 48C20 40 15 30 18 18c9 4 13 13 14 30Z" />
-          <path d="M32 48c12-8 17-18 14-30-9 4-13 13-14 30Z" />
-          <path d="M32 47C24 36 24 23 32 11c8 12 8 25 0 36Z" />
-          <path d="M20 43C12 39 8 33 8 25c9 1 16 7 20 20" />
-          <path d="M44 43c8-4 12-10 12-18-9 1-16 7-20 20" />
-          <path d="M16 52h32" />
+        <g stroke="currentColor" strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M32 47C23 39 22 26 32 11c10 15 9 28 0 36Z" />
+          <path d="M30 48C19 47 12 39 10 27c11 1 19 7 22 18" />
+          <path d="M34 48c11-1 18-9 20-21-11 1-19 7-22 18" />
+          <path d="M16 54c10 3 22 3 32 0" />
         </g>
       </svg>
     </span>
@@ -221,12 +227,12 @@ export function EmptyState({ icon, title, helper, action }) {
   );
 }
 
-export function MonthNavigator({ label, onPrevious, onNext, action }) {
+export function MonthNavigator({ label, onPrevious, onNext, previousLabel = "Previous month", nextLabel = "Next month", action }) {
   return (
     <div className="month-nav">
-      <IconButton icon="left" label="Previous month" onClick={onPrevious} />
+      <IconButton icon="left" label={previousLabel} onClick={onPrevious} disabled={!onPrevious} />
       <div className="month-title">{label}</div>
-      <IconButton icon="right" label="Next month" onClick={onNext} />
+      <IconButton icon="right" label={nextLabel} onClick={onNext} disabled={!onNext} />
       {action || <span />}
     </div>
   );

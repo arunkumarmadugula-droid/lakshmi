@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { CATEGORIES } from "../data/defaults.js";
+import { CATEGORIES, DRIVE_THROUGH_BUCKETS } from "../data/defaults.js";
+import { expenseRefundStatus, ownerMatches, reconcileCardTransactions } from "../lib/finance.js";
 import { blankDraft, parseAiResult, prepareDocument } from "../lib/importers.js";
 import { analyzeDocument } from "../lib/openai.js";
 import { copySplitExpense, saveSplitPdf, shareSplitExpense } from "../lib/share.js";
@@ -20,13 +21,28 @@ function decorateDraft(kind, value, fromAi = false) {
     };
   }
   if (kind === "receipt") {
+    const uncertain = value.transactionType === "uncertain";
     return {
       ...value,
+      transactionType: value.transactionType === "refund" ? "refund" : "expense",
+      originalExpenseId: value.originalExpenseId || "",
+      warnings: uncertain ? ["Confirm whether this is an expense or refund.", ...(value.warnings || [])] : (value.warnings || []),
       splitEnabled: !!value.splitEnabled,
       splitCount: Math.max(2, Math.round(number(value.splitCount) || 2)),
     };
   }
   return value;
+}
+
+function suggestedOriginalExpense(vault, draft, ownerScope) {
+  if (draft.transactionType !== "refund") return "";
+  const normalizedStore = String(draft.store || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const candidates = vault.expenses.filter((expense) => {
+    const store = String(expense.store || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    return ownerMatches(expense, ownerScope) && expense.date <= (draft.date || todayISO()) && expenseRefundStatus(vault, expense).remaining + 0.005 >= number(draft.total)
+      && (!normalizedStore || store.includes(normalizedStore) || normalizedStore.includes(store));
+  });
+  return candidates.sort((a, b) => String(b.date).localeCompare(String(a.date)))[0]?.id || "";
 }
 
 function receiptMath(current, overrides = {}) {
@@ -45,7 +61,7 @@ function payslipMath(current, overrides = {}) {
   return next;
 }
 
-export default function AddTab({ vault, persist, notify, openModal, profileId, keyObject }) {
+export default function AddTab({ vault, persist, notify, openModal, profileId, keyObject, currentOwner = "me", companion = false }) {
   const [mode, setMode] = useState("receipt");
   const [draft, setDraft] = useState(null);
   const [prepared, setPrepared] = useState(null);
@@ -77,6 +93,13 @@ export default function AddTab({ vault, persist, notify, openModal, profileId, k
     setError("");
   }
 
+  function startRefund() {
+    setMode("receipt");
+    setPrepared(null);
+    setDraft(decorateDraft("receipt", { ...blankDraft("receipt"), transactionType: "refund" }));
+    setError("");
+  }
+
   async function loadFile(file) {
     setBusy("Preparing securely...");
     setError("");
@@ -96,7 +119,10 @@ export default function AddTab({ vault, persist, notify, openModal, profileId, k
           prepared: document,
           kind: mode,
         });
-        setDraft(decorateDraft(mode, parseAiResult(result.draft, mode), true));
+        const scanReferenceDate = todayISO(new Date(document.archiveFile?.lastModified || Date.now()));
+        const parsed = decorateDraft(mode, parseAiResult(result.draft, mode, { referenceDate: scanReferenceDate }), true);
+        if (mode === "receipt") parsed.originalExpenseId = suggestedOriginalExpense(vault, parsed, currentOwner === "partner" ? "partner" : "mine");
+        setDraft(parsed);
         await persist((current) => ({
           ...current,
           ai: { ...current.ai, usage: [result.usage, ...(current.ai?.usage || [])].slice(0, 500) },
@@ -133,10 +159,43 @@ export default function AddTab({ vault, persist, notify, openModal, profileId, k
     }
     setBusy("Saving securely...");
     try {
-      const id = uid("expense");
+      const id = uid(draft.transactionType === "refund" ? "refund" : "expense");
       const date = draft.date || todayISO();
-      const documentId = await archiveDocument(id, date, "receipt");
+      const originalBeforeArchive = draft.transactionType === "refund" ? vault.expenses.find((item) => item.id === draft.originalExpenseId) : null;
+      if (originalBeforeArchive && total > expenseRefundStatus(vault, originalBeforeArchive).remaining + 0.005) throw new Error(`Only ${money(expenseRefundStatus(vault, originalBeforeArchive).remaining)} remains refundable for that purchase.`);
+      const documentId = await archiveDocument(id, date, draft.transactionType === "refund" ? "refund" : "receipt");
       const splitCount = Math.max(2, Math.round(number(draft.splitCount) || 2));
+      if (draft.transactionType === "refund") {
+        const original = originalBeforeArchive;
+        const refund = {
+          id,
+          originalExpenseId: original?.id || "",
+          store: draft.store.trim(),
+          date,
+          effectiveDate: original?.date || date,
+          category: original?.category || draft.category || "Other",
+          amount: total,
+          subtotal: number(draft.subtotal),
+          tax: number(draft.tax),
+          refundMethod: draft.paymentMethod || "bank",
+          cardId: draft.paymentMethod === "credit" ? draft.cardId || original?.cardId || "" : "",
+          items: (draft.items || []).filter((item) => item.name?.trim()).map((item) => ({ ...item, id: item.id || uid("item"), qty: number(item.qty) || 1, lineTotal: Math.abs(number(item.lineTotal)) })),
+          owner: currentOwner,
+          source: prepared ? "document" : "manual",
+          sourceFileName: prepared?.fileName || "",
+          documentId,
+          originalReceiptNumber: draft.originalReceiptNumber || "",
+          createdAt: new Date().toISOString(),
+        };
+        await persist((current) => ({
+          ...current,
+          refunds: [refund, ...(current.refunds || [])],
+          settings: refund.refundMethod === "bank" ? { ...current.settings, bankBalance: number(current.settings.bankBalance) + total } : current.settings,
+        }));
+        discard();
+        notify(`${money(total)} refund saved. It reduces spending and is not counted as income.`);
+        return;
+      }
       const expense = {
         id,
         store: draft.store.trim(),
@@ -162,6 +221,7 @@ export default function AddTab({ vault, persist, notify, openModal, profileId, k
         source: prepared ? "document" : "manual",
         sourceFileName: prepared?.fileName || "",
         documentId,
+        owner: currentOwner,
         createdAt: new Date().toISOString(),
       };
       await persist((current) => {
@@ -234,6 +294,10 @@ export default function AddTab({ vault, persist, notify, openModal, profileId, k
         let matching = current.incomeSources.find((source) => source.owner === (draft.owner || "me") && source.kind === "salary");
         if (draft.applyToIncome) {
           if (matching) {
+            let salaryHistory = [...(matching.salaryHistory || [])];
+            if (!salaryHistory.length) salaryHistory.push({ id: uid("salary-rate"), effectiveDate: matching.startDate || String(matching.createdAt || "").slice(0, 10) || "0000-01-01", reason: "Previous salary rate", amount: number(matching.amount), annualSalary: number(matching.annualSalary), province: matching.province, frequency: matching.frequency });
+            const actualRate = { id: uid("salary-rate"), effectiveDate: payDate, reason: "Payslip actual", amount: payslip.netPay, annualSalary: number(matching.annualSalary), province: matching.province, frequency: draft.frequency || matching.frequency, benefitsPerPay: number(matching.benefitsPerPay), rrspAnnual: number(matching.rrspAnnual), payAdjustments: matching.payAdjustments || [] };
+            salaryHistory = salaryHistory.some((item) => item.effectiveDate === payDate) ? salaryHistory.map((item) => item.effectiveDate === payDate ? { ...actualRate, id: item.id || actualRate.id } : item) : [...salaryHistory, actualRate];
             matching = {
               ...matching,
               name: payslip.employer,
@@ -241,6 +305,7 @@ export default function AddTab({ vault, persist, notify, openModal, profileId, k
               amount: payslip.netPay,
               frequency: draft.frequency || matching.frequency,
               nextDate: draft.nextDate || matching.nextDate,
+              salaryHistory,
             };
             incomeSources = current.incomeSources.map((source) => source.id === matching.id ? matching : source);
           } else {
@@ -256,6 +321,7 @@ export default function AddTab({ vault, persist, notify, openModal, profileId, k
               active: true,
               autoPost: true,
               savingsPercent: 0,
+              salaryHistory: [{ id: uid("salary-rate"), effectiveDate: payDate, reason: "Payslip actual", amount: payslip.netPay, frequency: draft.frequency || "biweekly" }],
             };
             incomeSources = [matching, ...current.incomeSources];
           }
@@ -328,6 +394,7 @@ export default function AddTab({ vault, persist, notify, openModal, profileId, k
             dueDay: Number(String(draft.dueDate).slice(8, 10)) || 21,
             active: true,
             useLastAmountEstimate: false,
+            owner: currentOwner,
           };
           creditCards = [card, ...creditCards];
         } else {
@@ -338,6 +405,7 @@ export default function AddTab({ vault, persist, notify, openModal, profileId, k
             last4: String(draft.last4 || item.last4).slice(-4),
             statementDay: Number(String(statementDate).slice(8, 10)) || item.statementDay,
             dueDay: Number(String(draft.dueDate).slice(8, 10)) || item.dueDay,
+            owner: item.owner || currentOwner,
           } : item);
         }
         const statement = {
@@ -347,6 +415,8 @@ export default function AddTab({ vault, persist, notify, openModal, profileId, k
           dueDate: draft.dueDate,
           statementBalance: number(draft.statementBalance),
           minimumPayment: number(draft.minimumPayment),
+          owner: currentOwner,
+          transactions: reconcileCardTransactions(current, card.id, draft.transactions || []),
           sourceFileName: prepared?.fileName || "",
           documentId,
           createdAt: new Date().toISOString(),
@@ -370,7 +440,10 @@ export default function AddTab({ vault, persist, notify, openModal, profileId, k
 
   return (
     <>
-      <Segmented label="Document type" value={mode} onChange={changeMode} options={[
+      <Segmented columns={companion ? 2 : undefined} label="Document type" value={mode} onChange={changeMode} options={companion ? [
+        { value: "receipt", label: "Receipt" },
+        { value: "card", label: "Card bill" },
+      ] : [
         { value: "receipt", label: "Receipt" },
         { value: "payslip", label: "Payslip" },
         { value: "card", label: "Card bill" },
@@ -390,7 +463,7 @@ export default function AddTab({ vault, persist, notify, openModal, profileId, k
 
       {draft && (
         <>
-          {mode === "receipt" && <ReceiptReview draft={draft} setDraft={setDraft} cards={vault.creditCards} onSave={saveReceipt} onDiscard={discard} disabled={!!busy} />}
+          {mode === "receipt" && <ReceiptReview draft={draft} setDraft={setDraft} cards={vault.creditCards} vault={vault} currentOwner={currentOwner} onSave={saveReceipt} onDiscard={discard} disabled={!!busy} />}
           {mode === "payslip" && <PayslipReview draft={draft} setDraft={setDraft} onSave={savePayslip} onDiscard={discard} disabled={!!busy} />}
           {mode === "card" && <CardReview draft={draft} setDraft={setDraft} onSave={saveCardStatement} onDiscard={discard} disabled={!!busy} />}
           {busy && <div className="upload-status" role="status">{busy}</div>}
@@ -403,24 +476,39 @@ export default function AddTab({ vault, persist, notify, openModal, profileId, k
           <CardHeader
             label="Manual entry"
             helper={mode === "receipt" ? "Cash, rent, recurring items, or anything unexpected" : mode === "payslip" ? "Enter payslip actuals without a document" : "Set up a card or statement without a document"}
-            action={<Button kind="ghost" onClick={startManual}><Icon name="plus" />Add</Button>}
+            action={mode === "receipt" ? <span className="inline-actions"><IconButton icon="restore" label="Add refund manually" onClick={startRefund} /><Button kind="ghost" onClick={startManual}><Icon name="plus" />Add</Button></span> : <Button kind="ghost" onClick={startManual}><Icon name="plus" />Add</Button>}
             noMargin
           />
         </Card>
       )}
 
-      <button className="fab" type="button" aria-label="Add inflow or opening balance" title="Add inflow" onClick={() => openModal({ content: <QuickInflowModal vault={vault} persist={persist} notify={notify} onClose={() => openModal(null)} /> })}><Icon name="plus" size={20} strokeWidth={2.2} /></button>
+      {!draft && mode === "receipt" && <DriveThroughFavorites vault={vault} persist={persist} notify={notify} openModal={openModal} currentOwner={currentOwner} />}
+
+      {!companion && <button className="fab" type="button" aria-label="Add money movement" title="Add money movement" onClick={() => openModal({ content: <QuickInflowModal vault={vault} persist={persist} notify={notify} onRefund={() => { openModal(null); startRefund(); }} onClose={() => openModal(null)} /> })}><Icon name="plus" size={20} strokeWidth={2.2} /></button>}
     </>
   );
 }
 
-function ReceiptReview({ draft, setDraft, cards, onSave, onDiscard, disabled }) {
+function ReceiptReview({ draft, setDraft, cards, vault, currentOwner, onSave, onDiscard, disabled }) {
   const update = (key, value) => setDraft((current) => ["tax", "tip", "discount"].includes(key) ? receiptMath(current, { [key]: value }) : { ...current, [key]: value });
   const updateItem = (id, key, value) => setDraft((current) => receiptMath(current, { items: current.items.map((item) => item.id === id ? { ...item, [key]: value } : item), manualSubtotal: false }));
   const removeItem = (id) => setDraft((current) => receiptMath(current, { items: current.items.filter((item) => item.id !== id), manualSubtotal: false }));
   const splitCount = Math.max(2, Math.round(number(draft.splitCount) || 2));
+  const ownerScope = currentOwner === "partner" ? "partner" : "mine";
+  const refundable = vault.expenses.filter((expense) => ownerMatches(expense, ownerScope) && expense.date <= (draft.date || todayISO()) && expenseRefundStatus(vault, expense).remaining > 0.005).sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  function chooseOriginal(value) {
+    const expense = vault.expenses.find((item) => item.id === value);
+    setDraft((current) => ({
+      ...current,
+      originalExpenseId: value,
+      category: expense?.category || current.category,
+      cardId: expense?.paymentMethod === "credit" ? expense.cardId || current.cardId : current.cardId,
+      paymentMethod: expense?.paymentMethod === "credit" ? "credit" : current.paymentMethod,
+    }));
+  }
   return (
     <section className="receipt-paper">
+      <Segmented columns={2} label="Transaction type" value={draft.transactionType || "expense"} onChange={(value) => setDraft((current) => ({ ...current, transactionType: value, splitEnabled: value === "refund" ? false : current.splitEnabled }))} options={[{ value: "expense", label: "Expense" }, { value: "refund", label: "Refund" }]} />
       <div className="receipt-head">
         <Input className="receipt-input" aria-label="Store" value={draft.store || ""} placeholder="Store name" onChange={(event) => update("store", event.target.value)} style={{ textAlign: "center", fontWeight: 700 }} />
         <div className="helper">Review before saving</div>
@@ -429,6 +517,7 @@ function ReceiptReview({ draft, setDraft, cards, onSave, onDiscard, disabled }) 
         <Field label="Date"><Input type="date" value={draft.date || todayISO()} onChange={(event) => update("date", event.target.value)} /></Field>
         <Field label="Category"><Select value={draft.category || "Other"} onChange={(event) => update("category", event.target.value)}>{CATEGORIES.map((category) => <option key={category}>{category}</option>)}</Select></Field>
       </div>
+      {draft.transactionType === "refund" && <Field label="Original purchase (optional)"><Select value={draft.originalExpenseId || ""} onChange={(event) => chooseOriginal(event.target.value)}><option value="">Not linked</option>{refundable.map((expense) => <option key={expense.id} value={expense.id}>{expense.date} - {expense.store} - {money(expenseRefundStatus(vault, expense).remaining)} available</option>)}</Select></Field>}
       {(draft.items || []).map((item) => (
         <div className="row" key={item.id}>
           <div>
@@ -449,16 +538,16 @@ function ReceiptReview({ draft, setDraft, cards, onSave, onDiscard, disabled }) 
       <div className="row"><span>Discount</span><Input className="receipt-input receipt-amount" inputMode="decimal" value={draft.discount ?? ""} onChange={(event) => update("discount", event.target.value)} /></div>
       <div className="row"><strong>Total</strong><Input className="receipt-input receipt-amount" inputMode="decimal" value={draft.total ?? ""} onChange={(event) => update("total", event.target.value)} style={{ fontWeight: 700 }} /></div>
       <div className="field-grid" style={{ marginTop: 10 }}>
-        <Field label="Paid with"><Select value={draft.paymentMethod || "bank"} onChange={(event) => update("paymentMethod", event.target.value)}><option value="bank">Bank / debit</option><option value="cash">Cash</option><option value="credit">Credit card</option></Select></Field>
+        <Field label={draft.transactionType === "refund" ? "Refunded to" : "Paid with"}><Select value={draft.paymentMethod || "bank"} onChange={(event) => update("paymentMethod", event.target.value)}><option value="bank">Bank / debit</option><option value="cash">Cash</option><option value="credit">Credit card</option></Select></Field>
         {draft.paymentMethod === "credit" ? <Field label="Card"><Select value={draft.cardId || ""} onChange={(event) => update("cardId", event.target.value)}><option value="">Unspecified</option>{cards.map((card) => <option key={card.id} value={card.id}>{card.bank} {card.last4 ? `...${card.last4}` : card.name}</option>)}</Select></Field> : <div />}
       </div>
-      {draft.category === "Fuel" && (
+      {draft.transactionType !== "refund" && draft.category === "Fuel" && (
         <div className="form-stack" style={{ marginTop: 10 }}>
           <div className="field-grid"><Field label="Odometer"><Input inputMode="decimal" value={draft.odometer || ""} onChange={(event) => update("odometer", event.target.value)} /></Field><Field label="Litres"><Input inputMode="decimal" value={draft.litres || ""} onChange={(event) => update("litres", event.target.value)} /></Field></div>
           <Field label="Octane"><Select value={draft.octane || "Regular"} onChange={(event) => update("octane", event.target.value)}><option>Regular</option><option>Mid-grade</option><option>Premium</option><option>Diesel</option></Select></Field>
         </div>
       )}
-      <div className="split-card">
+      {draft.transactionType !== "refund" && <div className="split-card">
         <label className="check-row"><input type="checkbox" checked={!!draft.splitEnabled} onChange={(event) => update("splitEnabled", event.target.checked)} /><span>Split this bill</span></label>
         {draft.splitEnabled && (
           <div className="field-grid" style={{ marginTop: 10 }}>
@@ -466,9 +555,9 @@ function ReceiptReview({ draft, setDraft, cards, onSave, onDiscard, disabled }) 
             <div className="split-summary"><span className="label">Your share</span><strong>{money(number(draft.total) / splitCount)}</strong><span className="helper">Collect {money(number(draft.total) - number(draft.total) / splitCount)}</span></div>
           </div>
         )}
-      </div>
+      </div>}
       {!!draft.warnings?.length && <div className="notice-inline">{draft.warnings.join(" ")}</div>}
-      <div className="button-row" style={{ marginTop: 12 }}><Button kind="primary" disabled={disabled} onClick={onSave}><Icon name="check" />Save to ledger</Button><Button kind="ghost" disabled={disabled} onClick={onDiscard}>Discard</Button></div>
+      <div className="button-row" style={{ marginTop: 12 }}><Button kind="primary" disabled={disabled} onClick={onSave}><Icon name="check" />{draft.transactionType === "refund" ? "Save refund" : "Save to ledger"}</Button><Button kind="ghost" disabled={disabled} onClick={onDiscard}>Discard</Button></div>
     </section>
   );
 }
@@ -505,6 +594,8 @@ function PayslipReview({ draft, setDraft, onSave, onDiscard, disabled }) {
 
 function CardReview({ draft, setDraft, onSave, onDiscard, disabled }) {
   const update = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
+  const updateTransaction = (index, key, value) => setDraft((current) => ({ ...current, transactions: (current.transactions || []).map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item) }));
+  const removeTransaction = (index) => setDraft((current) => ({ ...current, transactions: (current.transactions || []).filter((_, itemIndex) => itemIndex !== index) }));
   return (
     <Card>
       <CardHeader label="Statement review" helper="Creates reminders and stays separate from monthly Spent." />
@@ -513,6 +604,10 @@ function CardReview({ draft, setDraft, onSave, onDiscard, disabled }) {
         <Field label="Card name"><Input value={draft.cardName || ""} onChange={(event) => update("cardName", event.target.value)} /></Field>
         <div className="field-grid"><Field label="Generated"><Input type="date" value={draft.statementDate || todayISO()} onChange={(event) => update("statementDate", event.target.value)} /></Field><Field label="Due date"><Input type="date" value={draft.dueDate || todayISO()} onChange={(event) => update("dueDate", event.target.value)} /></Field></div>
         <div className="field-grid"><Field label="Statement balance"><Input inputMode="decimal" value={draft.statementBalance ?? ""} onChange={(event) => update("statementBalance", event.target.value)} /></Field><Field label="Minimum payment"><Input inputMode="decimal" value={draft.minimumPayment ?? ""} onChange={(event) => update("minimumPayment", event.target.value)} /></Field></div>
+        <details className="settings-section"><summary><span><Icon name="ledger" />Statement transactions ({(draft.transactions || []).length})</span><Icon name="chevron-down" /></summary><div className="settings-section-body">
+          {(draft.transactions || []).map((transaction, index) => <div className="statement-transaction-editor" key={transaction.id || `${transaction.date}-${index}`}><div className="field-grid"><Field label="Date"><Input type="date" value={transaction.date || ""} onChange={(event) => updateTransaction(index, "date", event.target.value)} /></Field><Field label="Type"><Select value={transaction.direction || "debit"} onChange={(event) => updateTransaction(index, "direction", event.target.value)}><option value="debit">Purchase</option><option value="credit">Refund / credit</option></Select></Field></div><Field label="Description"><Input value={transaction.description || ""} onChange={(event) => updateTransaction(index, "description", event.target.value)} /></Field><div className="inline-actions"><Field label="Amount"><Input inputMode="decimal" value={transaction.amount ?? ""} onChange={(event) => updateTransaction(index, "amount", event.target.value)} /></Field><IconButton icon="trash" label="Remove transaction" className="danger" onClick={() => removeTransaction(index)} /></div></div>)}
+          <Button compact onClick={() => setDraft((current) => ({ ...current, transactions: [...(current.transactions || []), { id: uid("statement-transaction"), date: current.statementDate || todayISO(), description: "", amount: "", direction: "debit" }] }))}><Icon name="plus" />Add transaction</Button>
+        </div></details>
         {!!draft.warnings?.length && <div className="notice-inline">{draft.warnings.join(" ")}</div>}
         <div className="button-row"><Button kind="primary" disabled={disabled} onClick={onSave}><Icon name="check" />Save statement</Button><Button kind="ghost" disabled={disabled} onClick={onDiscard}>Discard</Button></div>
       </div>
@@ -553,7 +648,121 @@ function SplitShareModal({ expense, notify, onClose }) {
   );
 }
 
-function QuickInflowModal({ vault, persist, notify, onClose }) {
+function DriveThroughFavorites({ vault, persist, notify, openModal, currentOwner }) {
+  const favorites = vault.quickFavorites || [];
+  return (
+    <Card>
+      <CardHeader label="Drive-through favourites" helper="Fast capture without a receipt. Amount always starts blank." action={<Button compact onClick={() => openModal({ content: <FavoriteManager vault={vault} persist={persist} notify={notify} onClose={() => openModal(null)} /> })}><Icon name="edit" />Manage</Button>} />
+      {favorites.length ? <div className="favorite-grid">{favorites.map((favorite) => (
+        <button type="button" className="favorite-button" key={favorite.id} onClick={() => openModal({ content: <QuickSpendModal favorite={favorite} vault={vault} persist={persist} notify={notify} currentOwner={currentOwner} onClose={() => openModal(null)} /> })}>
+          <span className="icon-box"><Icon name="coffee" /></span><span className="truncate"><strong>{favorite.name}</strong><span>{favorite.bucket}</span></span><Icon name="right" />
+        </button>
+      ))}</div> : <div className="helper">Add a favourite merchant to create a receiptless expense in a few taps.</div>}
+    </Card>
+  );
+}
+
+function QuickSpendModal({ favorite, vault, persist, notify, currentOwner, onClose }) {
+  const [form, setForm] = useState({
+    merchant: favorite.name || "",
+    bucket: favorite.bucket || "Coffee",
+    category: favorite.category || "Dining",
+    amount: "",
+    date: todayISO(),
+    paymentMethod: favorite.paymentMethod || "credit",
+    cardId: favorite.cardId || "",
+    notes: "",
+  });
+  const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  function save() {
+    const total = number(form.amount);
+    if (!form.merchant.trim() || total <= 0) return;
+    const expense = {
+      id: uid("expense"),
+      store: form.merchant.trim(),
+      date: form.date,
+      category: form.category || "Dining",
+      subtotal: total,
+      tax: 0,
+      tip: 0,
+      discount: 0,
+      total,
+      paymentMethod: form.paymentMethod,
+      cardId: form.paymentMethod === "credit" ? form.cardId : "",
+      owner: currentOwner,
+      items: [{ id: uid("item"), name: form.bucket || "Drive-through", qty: 1, unit: "ea", lineTotal: total }],
+      source: "quick-spend",
+      notes: form.notes.trim(),
+      needsDetails: !form.notes.trim(),
+      createdAt: new Date().toISOString(),
+    };
+    persist((current) => ({
+      ...current,
+      expenses: [expense, ...current.expenses],
+      settings: expense.paymentMethod === "credit" ? current.settings : { ...current.settings, bankBalance: number(current.settings.bankBalance) - total },
+    }));
+    notify(`${money(total)} quick expense saved for ${expense.store}.`);
+    onClose();
+  }
+  return (
+    <Modal label="Receiptless expense" title={favorite.name || "Quick spend"} onClose={onClose}>
+      <div className="form-stack">
+        <div className="security-banner"><span className="icon-box"><Icon name="coffee" /></span><div><strong>{form.bucket}</strong><div className="helper">Saved with the current date. Add a note now or complete it later in Ledger.</div></div></div>
+        <Field label="Merchant"><Input value={form.merchant} onChange={(event) => update("merchant", event.target.value)} /></Field>
+        <div className="field-grid"><Field label="Bucket"><Select value={form.bucket} onChange={(event) => update("bucket", event.target.value)}>{DRIVE_THROUGH_BUCKETS.map((bucket) => <option key={bucket}>{bucket}</option>)}</Select></Field><Field label="Amount"><Input autoFocus inputMode="decimal" value={form.amount} placeholder="0.00" onChange={(event) => update("amount", event.target.value)} /></Field></div>
+        <div className="field-grid"><Field label="Date"><Input type="date" value={form.date} onChange={(event) => update("date", event.target.value)} /></Field><Field label="Category"><Select value={form.category} onChange={(event) => update("category", event.target.value)}>{CATEGORIES.map((category) => <option key={category}>{category}</option>)}</Select></Field></div>
+        <div className="field-grid"><Field label="Paid with"><Select value={form.paymentMethod} onChange={(event) => update("paymentMethod", event.target.value)}><option value="bank">Bank / debit</option><option value="cash">Cash</option><option value="credit">Credit card</option></Select></Field>{form.paymentMethod === "credit" ? <Field label="Card"><Select value={form.cardId} onChange={(event) => update("cardId", event.target.value)}><option value="">Unspecified</option>{vault.creditCards.map((card) => <option key={card.id} value={card.id}>{card.bank} {card.last4 ? `...${card.last4}` : card.name}</option>)}</Select></Field> : <div />}</div>
+        <Field label="What did you buy? (optional)"><Input value={form.notes} placeholder="Coffee and breakfast" onChange={(event) => update("notes", event.target.value)} /></Field>
+        <Button kind="primary" disabled={!form.merchant.trim() || number(form.amount) <= 0} onClick={save}><Icon name="check" />Save quick expense</Button>
+      </div>
+    </Modal>
+  );
+}
+
+function FavoriteManager({ vault, persist, notify, onClose }) {
+  const [items, setItems] = useState(vault.quickFavorites || []);
+  const [selectedId, setSelectedId] = useState("");
+  const [form, setForm] = useState({ name: "", bucket: "Coffee", category: "Dining", paymentMethod: "credit", cardId: "" });
+  const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  function choose(item) {
+    setSelectedId(item.id);
+    setForm({ name: item.name || "", bucket: item.bucket || "Coffee", category: item.category || "Dining", paymentMethod: item.paymentMethod || "credit", cardId: item.cardId || "" });
+  }
+  function reset() {
+    setSelectedId("");
+    setForm({ name: "", bucket: "Coffee", category: "Dining", paymentMethod: "credit", cardId: "" });
+  }
+  function save() {
+    if (!form.name.trim()) return;
+    const item = { id: selectedId || uid("favorite"), ...form, name: form.name.trim(), cardId: form.paymentMethod === "credit" ? form.cardId : "" };
+    const next = selectedId ? items.map((entry) => entry.id === selectedId ? item : entry) : [...items, item];
+    setItems(next);
+    persist((current) => ({ ...current, quickFavorites: next }));
+    notify(selectedId ? "Favourite updated." : "Favourite added.");
+    reset();
+  }
+  function remove() {
+    if (!selectedId) return;
+    const next = items.filter((entry) => entry.id !== selectedId);
+    setItems(next);
+    persist((current) => ({ ...current, quickFavorites: next }));
+    notify("Favourite removed.");
+    reset();
+  }
+  return (
+    <Modal label="Quick capture" title="Drive-through favourites" onClose={onClose}>
+      <div className="form-stack">
+        {items.map((item) => <button className="profile-row" type="button" key={item.id} onClick={() => choose(item)} aria-pressed={selectedId === item.id}><span className="icon-box"><Icon name="coffee" /></span><span className="truncate"><strong>{item.name}</strong><br /><span className="helper">{item.bucket} - {item.category}</span></span><Icon name="edit" /></button>)}
+        <Field label="Merchant"><Input value={form.name} placeholder="Tim Hortons" onChange={(event) => update("name", event.target.value)} /></Field>
+        <div className="field-grid"><Field label="Broad bucket"><Select value={form.bucket} onChange={(event) => update("bucket", event.target.value)}>{DRIVE_THROUGH_BUCKETS.map((bucket) => <option key={bucket}>{bucket}</option>)}</Select></Field><Field label="Ledger category"><Select value={form.category} onChange={(event) => update("category", event.target.value)}>{CATEGORIES.map((category) => <option key={category}>{category}</option>)}</Select></Field></div>
+        <div className="field-grid"><Field label="Usual payment"><Select value={form.paymentMethod} onChange={(event) => update("paymentMethod", event.target.value)}><option value="bank">Bank / debit</option><option value="cash">Cash</option><option value="credit">Credit card</option></Select></Field>{form.paymentMethod === "credit" ? <Field label="Usual card"><Select value={form.cardId} onChange={(event) => update("cardId", event.target.value)}><option value="">Ask each time</option>{vault.creditCards.map((card) => <option key={card.id} value={card.id}>{card.bank} {card.last4 ? `...${card.last4}` : card.name}</option>)}</Select></Field> : <div />}</div>
+        <div className="button-row"><Button kind="primary" disabled={!form.name.trim()} onClick={save}><Icon name="save" />{selectedId ? "Update" : "Add favourite"}</Button>{selectedId && <Button kind="danger" onClick={remove}><Icon name="trash" />Delete</Button>}<Button kind="ghost" onClick={reset}>Clear</Button></div>
+      </div>
+    </Modal>
+  );
+}
+
+function QuickInflowModal({ vault, persist, notify, onRefund, onClose }) {
   const outstanding = vault.expenses.map((expense) => {
     const expected = number(expense.split?.expectedReimbursement);
     const received = (vault.splitReimbursements || []).filter((item) => item.expenseId === expense.id).reduce((sum, item) => sum + number(item.amount), 0);
@@ -572,6 +781,10 @@ function QuickInflowModal({ vault, persist, notify, onClose }) {
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
 
   function changeKind(value) {
+    if (value === "refund") {
+      onRefund?.();
+      return;
+    }
     setForm((current) => ({ ...current, kind: value, amount: value === "split" ? selected?.remaining || "" : "", savings: value === "split" ? "" : current.savings }));
     setError("");
   }
@@ -599,6 +812,7 @@ function QuickInflowModal({ vault, persist, notify, onClose }) {
         person: form.name.trim() || "Bill split repayment",
         amount,
         date: form.date,
+        owner: selected.expense.owner || "me",
         createdAt: new Date().toISOString(),
       };
       persist((current) => ({
@@ -647,9 +861,9 @@ function QuickInflowModal({ vault, persist, notify, onClose }) {
   }
 
   return (
-    <Modal label="Quick inflow" title="Income or opening balance" onClose={onClose}>
+    <Modal label="Quick entry" title="Money movement" onClose={onClose}>
       <div className="form-stack">
-        <Field label="Type"><Select value={form.kind} onChange={(event) => changeKind(event.target.value)}><option value="extra">Additional income</option><option value="gift">Gift</option><option value="split" disabled={!outstanding.length}>Bill split repayment</option><option value="balance">Opening balance</option></Select></Field>
+        <Field label="Type"><Select value={form.kind} onChange={(event) => changeKind(event.target.value)}><option value="extra">Additional income</option><option value="gift">Gift</option><option value="split" disabled={!outstanding.length}>Bill split repayment</option><option value="refund">Refund</option><option value="balance">Opening balance</option></Select></Field>
         {form.kind === "split" && <Field label="Split bill"><Select value={form.expenseId} onChange={(event) => changeExpense(event.target.value)}>{outstanding.map((item) => <option key={item.expense.id} value={item.expense.id}>{item.expense.date} - {item.expense.store} - {money(item.remaining)} left</option>)}</Select></Field>}
         {form.kind !== "balance" && <Field label={form.kind === "split" ? "Paid by" : "Description"}><Input value={form.name} onChange={(event) => update("name", event.target.value)} placeholder={form.kind === "split" ? "Name of person" : "What was this for?"} /></Field>}
         <div className="field-grid">

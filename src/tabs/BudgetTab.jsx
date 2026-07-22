@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { BUDGET_SUBCATEGORIES, CATEGORIES } from "../data/defaults.js";
-import { budgetActuals, estimatePayroll, FREQUENCY_LABELS, monthStats, monthlyEquivalent, PROVINCE_OPTIONS } from "../lib/finance.js";
+import { budgetActuals, estimatePayroll, FREQUENCY_LABELS, incomeAmountOnDate, monthStats, monthlyEquivalent, PROVINCE_OPTIONS, salaryVersionOnDate, totalBudgetAmount, totalSavingsAllocated } from "../lib/finance.js";
 import { currentMonth, money, number, todayISO, uid } from "../lib/format.js";
 import { parseAiResult, prepareDocument } from "../lib/importers.js";
 import { analyzeDocument } from "../lib/openai.js";
@@ -9,14 +9,17 @@ import { Button, Card, CardHeader, EmptyState, Field, FileButton, Icon, IconButt
 
 export default function BudgetTab({ vault, persist, notify, openModal, profileId, keyObject }) {
   const [mode, setMode] = useState("income");
+  const isCanada = vault.settings.country !== "IN";
   const salaries = vault.incomeSources.filter((item) => item.kind === "salary");
   const [salaryId, setSalaryId] = useState(salaries[0]?.id || "");
   const salary = salaries.find((item) => item.id === salaryId) || salaries[0];
   const stats = monthStats(vault, currentMonth());
-  const projectedIncome = vault.incomeSources.filter((item) => item.active !== false).reduce((sum, item) => sum + monthlyEquivalent(item.amount, item.frequency), 0);
-  const totalBudget = Object.values(vault.budgets).reduce((sum, value) => sum + number(value), 0);
-  const activePayroll = salary?.annualSalary ? estimatePayroll({ annualSalary: salary.annualSalary, province: salary.province || vault.settings.province, frequency: salary.frequency, rrspAnnual: salary.rrspAnnual, benefitsPerPay: salary.benefitsPerPay }) : null;
-  const activeNetPay = salary ? number(salary.amount) : 0;
+  const projectedIncome = vault.incomeSources.filter((item) => item.active !== false).reduce((sum, item) => sum + monthlyEquivalent(incomeAmountOnDate(item, item.nextDate || todayISO()), item.frequency), 0);
+  const totalBudget = totalBudgetAmount(vault);
+  const activeVersion = salary ? salaryVersionOnDate(salary, todayISO()) : null;
+  const activeSalary = salary ? { ...salary, ...(activeVersion || {}) } : null;
+  const activePayroll = isCanada && activeSalary?.annualSalary ? estimatePayroll({ annualSalary: activeSalary.annualSalary, province: activeSalary.province || vault.settings.province, frequency: activeSalary.frequency, rrspAnnual: activeSalary.rrspAnnual, benefitsPerPay: activeSalary.benefitsPerPay }) : null;
+  const activeNetPay = salary ? incomeAmountOnDate(salary, todayISO()) : 0;
 
   useEffect(() => {
     if (salaries.length && !salaries.some((item) => item.id === salaryId)) setSalaryId(salaries[0].id);
@@ -55,7 +58,7 @@ export default function BudgetTab({ vault, persist, notify, openModal, profileId
             {vault.incomeSources.length ? vault.incomeSources.map((source) => (
               <div className="row with-icon" key={source.id}>
                 <span className="icon-box" style={{ color: "var(--inflow)" }}><Icon name={source.kind === "salary" ? "banknote" : "arrow-down-left"} /></span>
-                <span className="truncate"><strong>{source.name}</strong><br /><span className="helper">{money(source.amount)} {FREQUENCY_LABELS[source.frequency]?.toLowerCase()} - next {source.nextDate}</span></span>
+                <span className="truncate"><strong>{source.name}</strong><br /><span className="helper">{money(incomeAmountOnDate(source, source.nextDate || todayISO()))} {FREQUENCY_LABELS[source.frequency]?.toLowerCase()} - next {source.nextDate}</span></span>
                 <IconButton icon="edit" label="Edit income" onClick={() => openModal({ content: <IncomeEditor vault={vault} source={source} persist={persist} notify={notify} onClose={() => openModal(null)} /> })} />
               </div>
             )) : <EmptyState icon="banknote" title="Add your first income" helper="Salary, spouse income, rent, or business income." />}
@@ -63,11 +66,11 @@ export default function BudgetTab({ vault, persist, notify, openModal, profileId
 
           {activePayroll && (
             <Card>
-              <CardHeader label={`${salary.owner === "spouse" ? "Spouse" : "Your"} salary - Canada 2026 estimate`} helper={`${salary.company || salary.name} - ${activePayroll.provinceName}`} action={<Button compact onClick={() => openModal({ content: <IncomeEditor vault={vault} source={salary} persist={persist} notify={notify} onClose={() => openModal(null)} /> })}><Icon name="edit" />Edit</Button>} />
-              {salaries.length > 1 && <Segmented columns={2} label="Salary estimate" value={salary.id} onChange={setSalaryId} options={salaries.map((item) => ({ value: item.id, label: item.owner === "spouse" ? "Spouse" : "Me" }))} />}
+              <CardHeader label={`${salary.owner === "spouse" || salary.owner === "partner" ? "Partner" : "Your"} salary - Canada 2026 estimate`} helper={`${activeSalary.company || activeSalary.name} - ${activePayroll.provinceName}`} action={<div className="inline-actions"><Button compact onClick={() => openModal({ content: <BonusModal vault={vault} salary={salary} persist={persist} notify={notify} onClose={() => openModal(null)} /> })}><Icon name="plus" />Bonus</Button><Button compact onClick={() => openModal({ content: <IncomeEditor vault={vault} source={salary} persist={persist} notify={notify} onClose={() => openModal(null)} /> })}><Icon name="edit" />Edit</Button></div>} />
+              {salaries.length > 1 && <Segmented columns={2} label="Salary estimate" value={salary.id} onChange={setSalaryId} options={salaries.map((item) => ({ value: item.id, label: item.owner === "spouse" || item.owner === "partner" ? "Partner" : "Me" }))} />}
               <div className="metric-grid">
-                <div className="metric-tile in"><div className="label">Net / pay</div><div className="metric-value">{money(activeNetPay, 0)}</div><div className="helper">{FREQUENCY_LABELS[salary.frequency]}</div></div>
-                <div className="metric-tile"><div className="label">Net / month</div><div className="metric-value">{money(monthlyEquivalent(activeNetPay, salary.frequency), 0)}</div><div className="helper">after adjustments</div></div>
+                <div className="metric-tile in"><div className="label">Net / pay</div><div className="metric-value">{money(activeNetPay, 0)}</div><div className="helper">{FREQUENCY_LABELS[activeSalary.frequency]}</div></div>
+                <div className="metric-tile"><div className="label">Net / month</div><div className="metric-value">{money(monthlyEquivalent(activeNetPay, activeSalary.frequency), 0)}</div><div className="helper">after adjustments</div></div>
                 <div className="metric-tile"><div className="label">Gross / pay</div><div className="metric-value">{money(activePayroll.grossPay, 0)}</div><div className="helper">{activePayroll.periods} pays</div></div>
               </div>
               {[
@@ -77,8 +80,24 @@ export default function BudgetTab({ vault, persist, notify, openModal, profileId
                 ["EI / QPIP", (activePayroll.ei + activePayroll.qpip) / activePayroll.periods],
                 ["Benefits", activePayroll.benefitsPerPay],
               ].map(([label, value]) => <div className="row" key={label}><span>{label}</span><strong className="money">-{money(value)}</strong></div>)}
-              {(salary.payAdjustments || []).map((item) => <div className="row" key={item.id}><span>{item.name}<br /><span className="helper">{item.frequency === "perpay" ? "Every pay" : FREQUENCY_LABELS[item.frequency]}</span></span><strong className={`money ${item.direction === "in" ? "text-in" : "text-out"}`}>{item.direction === "in" ? "+" : "-"}{money(item.amount)}</strong></div>)}
+              {(activeSalary.payAdjustments || []).map((item) => <div className="row" key={item.id}><span>{item.name}<br /><span className="helper">{item.frequency === "perpay" ? "Every pay" : FREQUENCY_LABELS[item.frequency]}</span></span><strong className={`money ${item.direction === "in" ? "text-in" : "text-out"}`}>{item.direction === "in" ? "+" : "-"}{money(item.amount)}</strong></div>)}
+              {(salary.salaryHistory || []).length > 1 && <details className="settings-section"><summary><span><Icon name="calendar" />Salary rate history</span><Icon name="chevron-down" /></summary><div className="settings-section-body">{[...salary.salaryHistory].sort((a, b) => String(b.effectiveDate).localeCompare(String(a.effectiveDate))).map((version) => <div className="row" key={version.id || version.effectiveDate}><span>{version.effectiveDate}<br /><span className="helper">{version.reason || "Salary rate"}</span></span><strong className="money">{money(version.amount)}/pay</strong></div>)}</div></details>}
               <div className="tax-note">Planning estimate using 2026 payroll parameters. A real payslip remains the source of truth.</div>
+            </Card>
+          )}
+
+          {activeSalary && !isCanada && (
+            <Card>
+              <CardHeader label={`${salary.owner === "spouse" || salary.owner === "partner" ? "Partner" : "Your"} salary - India take-home schedule`} helper={`${activeSalary.company || activeSalary.name} - payslip or entered actual`} action={<div className="inline-actions"><Button compact onClick={() => openModal({ content: <BonusModal vault={vault} salary={salary} persist={persist} notify={notify} onClose={() => openModal(null)} /> })}><Icon name="plus" />Bonus</Button><Button compact onClick={() => openModal({ content: <IncomeEditor vault={vault} source={salary} persist={persist} notify={notify} onClose={() => openModal(null)} /> })}><Icon name="edit" />Edit</Button></div>} />
+              {salaries.length > 1 && <Segmented columns={2} label="Salary schedule" value={salary.id} onChange={setSalaryId} options={salaries.map((item) => ({ value: item.id, label: item.owner === "spouse" || item.owner === "partner" ? "Partner" : "Me" }))} />}
+              <div className="metric-grid">
+                <div className="metric-tile in"><div className="label">Net / pay</div><div className="metric-value">{money(activeNetPay, 0)}</div><div className="helper">{FREQUENCY_LABELS[activeSalary.frequency]}</div></div>
+                <div className="metric-tile"><div className="label">Net / month</div><div className="metric-value">{money(monthlyEquivalent(activeNetPay, activeSalary.frequency), 0)}</div><div className="helper">scheduled</div></div>
+                <div className="metric-tile"><div className="label">Annual gross</div><div className="metric-value">{money(activeSalary.annualSalary, 0)}</div><div className="helper">recorded</div></div>
+              </div>
+              {(activeSalary.payAdjustments || []).map((item) => <div className="row" key={item.id}><span>{item.name}<br /><span className="helper">{item.frequency === "perpay" ? "Every pay" : FREQUENCY_LABELS[item.frequency]}</span></span><strong className={`money ${item.direction === "in" ? "text-in" : "text-out"}`}>{item.direction === "in" ? "+" : "-"}{money(item.amount)}</strong></div>)}
+              {(salary.salaryHistory || []).length > 1 && <details className="settings-section"><summary><span><Icon name="calendar" />Salary rate history</span><Icon name="chevron-down" /></summary><div className="settings-section-body">{[...salary.salaryHistory].sort((a, b) => String(b.effectiveDate).localeCompare(String(a.effectiveDate))).map((version) => <div className="row" key={version.id || version.effectiveDate}><span>{version.effectiveDate}<br /><span className="helper">{version.reason || "Salary rate"}</span></span><strong className="money">{money(version.amount)}/pay</strong></div>)}</div></details>}
+              <div className="tax-note">Lakshmi does not apply Canadian deductions to Indian income. Enter take-home pay or upload a real payslip for accurate cash-flow planning.</div>
             </Card>
           )}
 
@@ -101,30 +120,84 @@ export default function BudgetTab({ vault, persist, notify, openModal, profileId
       )}
 
       {mode === "budgets" && <BudgetCategories vault={vault} persist={persist} notify={notify} openModal={openModal} />}
-      {mode === "savings" && <SavingsView vault={vault} persist={persist} notify={notify} />}
+      {mode === "savings" && <SavingsView vault={vault} persist={persist} notify={notify} openModal={openModal} />}
     </>
   );
 }
 
 function IncomeEditor({ vault, source, persist, notify, onClose }) {
+  const isCanada = vault.settings.country !== "IN";
   const [kind, setKind] = useState(source?.kind || "salary");
+  const [effectiveDate, setEffectiveDate] = useState(todayISO());
+  const [changeReason, setChangeReason] = useState("");
   const [form, setForm] = useState(source || {
     id: uid("income-source"), kind: "salary", name: "My salary", company: "", owner: vault.incomeSources.some((item) => item.owner === "me" && item.kind === "salary") ? "spouse" : "me",
     annualSalary: "", province: vault.settings.province || "ON", frequency: "biweekly", benefitsPerPay: 0, rrspAnnual: 0,
-    amount: 0, nextDate: todayISO(), savingsPercent: 0, active: true, autoPost: true,
+    amount: 0, baseNetPay: "", nextDate: todayISO(), savingsPercent: 0, active: true, autoPost: true,
   });
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
-  const payroll = kind === "salary" ? estimatePayroll({ annualSalary: form.annualSalary, province: form.province, frequency: form.frequency, benefitsPerPay: form.benefitsPerPay, rrspAnnual: form.rrspAnnual }) : null;
+  const periods = { weekly: 52, biweekly: 26, semimonthly: 24, monthly: 12 }[form.frequency] || 26;
+  const payroll = kind === "salary" && isCanada ? estimatePayroll({ annualSalary: form.annualSalary, province: form.province, frequency: form.frequency, benefitsPerPay: form.benefitsPerPay, rrspAnnual: form.rrspAnnual }) : null;
+  const baseNetPay = kind === "salary" ? (isCanada ? payroll?.netPay || 0 : number(form.baseNetPay ?? form.amount)) : 0;
   const adjustmentPerPay = kind === "salary" ? (form.payAdjustments || []).reduce((sum, item) => {
-    const perPay = item.frequency === "perpay" ? number(item.amount) : monthlyEquivalent(item.amount, item.frequency) * 12 / payroll.periods;
+    const perPay = item.frequency === "perpay" ? number(item.amount) : monthlyEquivalent(item.amount, item.frequency) * 12 / periods;
     return sum + (item.direction === "in" ? perPay : -perPay);
   }, 0) : 0;
-  const adjustedNetPay = kind === "salary" ? Math.max(0, Math.round((payroll.netPay + adjustmentPerPay) * 100) / 100) : 0;
+  const adjustedNetPay = kind === "salary" ? Math.max(0, Math.round((baseNetPay + adjustmentPerPay) * 100) / 100) : 0;
   const updateAdjustment = (id, key, value) => setForm((current) => ({ ...current, payAdjustments: (current.payAdjustments || []).map((item) => item.id === id ? { ...item, [key]: value } : item) }));
   function save() {
-    const item = kind === "salary"
-      ? { ...form, kind, name: form.company?.trim() || (form.owner === "spouse" ? "Spouse salary" : "My salary"), amount: adjustedNetPay, baseNetPay: payroll.netPay, annualSalary: number(form.annualSalary), benefitsPerPay: number(form.benefitsPerPay), rrspAnnual: number(form.rrspAnnual), savingsPercent: number(form.savingsPercent), payAdjustments: (form.payAdjustments || []).filter((entry) => entry.name?.trim() && number(entry.amount) > 0).map((entry) => ({ ...entry, amount: number(entry.amount), direction: entry.direction === "in" ? "in" : "out" })) }
-      : { ...form, kind: "other", name: form.name?.trim() || "Other income", amount: number(form.amount), savingsPercent: number(form.savingsPercent) };
+    let item;
+    if (kind === "salary") {
+      const payAdjustments = (form.payAdjustments || []).filter((entry) => entry.name?.trim() && number(entry.amount) > 0).map((entry) => ({ ...entry, amount: number(entry.amount), direction: entry.direction === "in" ? "in" : "out" }));
+      item = {
+        ...form,
+        kind,
+        name: form.company?.trim() || (form.owner === "spouse" || form.owner === "partner" ? "Partner salary" : "My salary"),
+        amount: adjustedNetPay,
+        baseNetPay,
+        annualSalary: number(form.annualSalary),
+        benefitsPerPay: number(form.benefitsPerPay),
+        rrspAnnual: number(form.rrspAnnual),
+        savingsPercent: number(form.savingsPercent),
+        payAdjustments,
+      };
+      const rate = {
+        id: uid("salary-rate"),
+        effectiveDate: source ? effectiveDate : form.nextDate || todayISO(),
+        reason: changeReason.trim() || (source ? "Salary update" : "Initial salary"),
+        amount: adjustedNetPay,
+        baseNetPay,
+        annualSalary: number(form.annualSalary),
+        province: form.province,
+        frequency: form.frequency,
+        benefitsPerPay: number(form.benefitsPerPay),
+        rrspAnnual: number(form.rrspAnnual),
+        payAdjustments,
+      };
+      let history = [...(source?.salaryHistory || [])];
+      if (source && !history.length) {
+        history.push({
+          id: uid("salary-rate"),
+          effectiveDate: source.startDate || String(source.createdAt || "").slice(0, 10) || "0000-01-01",
+          reason: "Previous salary rate",
+          amount: number(source.amount),
+          baseNetPay: number(source.baseNetPay || source.amount),
+          annualSalary: number(source.annualSalary),
+          province: source.province,
+          frequency: source.frequency,
+          benefitsPerPay: number(source.benefitsPerPay),
+          rrspAnnual: number(source.rrspAnnual),
+          payAdjustments: source.payAdjustments || [],
+        });
+      }
+      history = history.some((entry) => entry.effectiveDate === rate.effectiveDate)
+        ? history.map((entry) => entry.effectiveDate === rate.effectiveDate ? { ...rate, id: entry.id || rate.id } : entry)
+        : [...history, rate];
+      item.salaryHistory = history;
+      item.createdAt ||= new Date().toISOString();
+    } else {
+      item = { ...form, kind: "other", name: form.name?.trim() || "Other income", amount: number(form.amount), savingsPercent: number(form.savingsPercent) };
+    }
     const exists = vault.incomeSources.some((entry) => entry.id === item.id);
     persist({ ...vault, settings: { ...vault.settings, province: item.province || vault.settings.province }, incomeSources: exists ? vault.incomeSources.map((entry) => entry.id === item.id ? item : entry) : [item, ...vault.incomeSources] });
     notify("Income schedule saved.");
@@ -142,11 +215,11 @@ function IncomeEditor({ vault, source, persist, notify, onClose }) {
         <Segmented columns={2} label="Income type" value={kind} onChange={setKind} options={[{ value: "salary", label: "Salary" }, { value: "other", label: "Other income" }]} />
         {kind === "salary" ? (
           <>
-            <div className="field-grid"><Field label="Belongs to"><Select value={form.owner || "me"} onChange={(event) => update("owner", event.target.value)}><option value="me">Me</option><option value="spouse">Spouse</option></Select></Field><Field label="Province"><Select value={form.province || "ON"} onChange={(event) => update("province", event.target.value)}>{PROVINCE_OPTIONS.map((item) => <option value={item.code} key={item.code}>{item.code}</option>)}</Select></Field></div>
+            <div className="field-grid"><Field label="Belongs to"><Select value={form.owner || "me"} onChange={(event) => update("owner", event.target.value)}><option value="me">Me</option><option value="spouse">Spouse</option></Select></Field>{isCanada ? <Field label="Province"><Select value={form.province || "ON"} onChange={(event) => update("province", event.target.value)}>{PROVINCE_OPTIONS.map((item) => <option value={item.code} key={item.code}>{item.code}</option>)}</Select></Field> : <Field label="Payroll region"><Input value="India" disabled /></Field>}</div>
             <Field label="Company"><Input value={form.company || ""} onChange={(event) => update("company", event.target.value)} /></Field>
+            {source && <><div className="field-grid"><Field label="New rate effective from"><Input type="date" value={effectiveDate} onChange={(event) => setEffectiveDate(event.target.value)} /></Field><Field label="Change note"><Input value={changeReason} placeholder="Raise, promotion, new role" onChange={(event) => setChangeReason(event.target.value)} /></Field></div><div className="privacy-note">Recorded deposits stay unchanged. Unposted salary deposits use this rate from the effective date.</div></>}
             <div className="field-grid"><Field label="Annual salary"><Input inputMode="decimal" value={form.annualSalary ?? ""} onChange={(event) => update("annualSalary", event.target.value)} /></Field><Field label="Frequency"><Select value={form.frequency || "biweekly"} onChange={(event) => update("frequency", event.target.value)}><option value="weekly">Weekly</option><option value="biweekly">Bi-weekly</option><option value="semimonthly">Semi-monthly</option><option value="monthly">Monthly</option></Select></Field></div>
-            <div className="field-grid"><Field label="Benefits / pay"><Input inputMode="decimal" value={form.benefitsPerPay ?? ""} onChange={(event) => update("benefitsPerPay", event.target.value)} /></Field><Field label="RRSP / year"><Input inputMode="decimal" value={form.rrspAnnual ?? ""} onChange={(event) => update("rrspAnnual", event.target.value)} /></Field></div>
-            <div className="metric-grid"><div className="metric-tile in"><div className="label">Net / pay</div><div className="metric-value">{money(adjustedNetPay, 0)}</div></div><div className="metric-tile"><div className="label">Tax / pay</div><div className="metric-value">{money((payroll.federal + payroll.provincial) / payroll.periods, 0)}</div></div><div className="metric-tile"><div className="label">CPP + EI</div><div className="metric-value">{money((payroll.cpp + payroll.ei + payroll.qpip) / payroll.periods, 0)}</div></div></div>
+            {isCanada ? <><div className="field-grid"><Field label="Benefits / pay"><Input inputMode="decimal" value={form.benefitsPerPay ?? ""} onChange={(event) => update("benefitsPerPay", event.target.value)} /></Field><Field label="RRSP / year"><Input inputMode="decimal" value={form.rrspAnnual ?? ""} onChange={(event) => update("rrspAnnual", event.target.value)} /></Field></div><div className="metric-grid"><div className="metric-tile in"><div className="label">Net / pay</div><div className="metric-value">{money(adjustedNetPay, 0)}</div></div><div className="metric-tile"><div className="label">Tax / pay</div><div className="metric-value">{money((payroll.federal + payroll.provincial) / payroll.periods, 0)}</div></div><div className="metric-tile"><div className="label">CPP + EI</div><div className="metric-value">{money((payroll.cpp + payroll.ei + payroll.qpip) / payroll.periods, 0)}</div></div></div></> : <><Field label="Take-home per pay"><Input inputMode="decimal" value={form.baseNetPay ?? form.amount ?? ""} onChange={(event) => update("baseNetPay", event.target.value)} /></Field><div className="metric-grid"><div className="metric-tile in"><div className="label">Net / pay</div><div className="metric-value">{money(adjustedNetPay, 0)}</div></div><div className="metric-tile"><div className="label">Net / month</div><div className="metric-value">{money(monthlyEquivalent(adjustedNetPay, form.frequency), 0)}</div></div><div className="metric-tile"><div className="label">Pays / year</div><div className="metric-value">{periods}</div></div></div><div className="privacy-note">Use your expected take-home amount. Uploading a payslip later will reconcile the actual without inventing an Indian tax estimate.</div></>}
             {(form.payAdjustments || []).map((item) => <div className="pay-adjustment-row" key={item.id}><Field label="Description"><Input value={item.name || ""} onChange={(event) => updateAdjustment(item.id, "name", event.target.value)} /></Field><div className="field-grid"><Field label="Direction"><Select value={item.direction || "out"} onChange={(event) => updateAdjustment(item.id, "direction", event.target.value)}><option value="in">In</option><option value="out">Out</option></Select></Field><Field label="Amount"><Input inputMode="decimal" value={item.amount ?? ""} onChange={(event) => updateAdjustment(item.id, "amount", event.target.value)} /></Field></div><div className="inline-actions"><Field label="Frequency"><Select value={item.frequency || "perpay"} onChange={(event) => updateAdjustment(item.id, "frequency", event.target.value)}><option value="perpay">Every pay</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></Select></Field><IconButton icon="trash" label="Remove adjustment" className="danger" onClick={() => setForm((current) => ({ ...current, payAdjustments: current.payAdjustments.filter((entry) => entry.id !== item.id) }))} /></div></div>)}
             <Button compact onClick={() => setForm((current) => ({ ...current, payAdjustments: [...(current.payAdjustments || []), { id: uid("pay-adjustment"), name: "", amount: "", direction: "out", frequency: "perpay" }] }))}><Icon name="plus" />Add pay adjustment</Button>
           </>
@@ -155,7 +228,44 @@ function IncomeEditor({ vault, source, persist, notify, onClose }) {
         )}
         <div className="field-grid"><Field label="First expected deposit"><Input type="date" value={form.nextDate || todayISO()} onChange={(event) => update("nextDate", event.target.value)} /></Field><Field label="Savings split %"><Input inputMode="decimal" min="0" max="100" value={form.savingsPercent ?? 0} onChange={(event) => update("savingsPercent", event.target.value)} /></Field></div>
         <label className="check-row"><input type="checkbox" checked={form.autoPost !== false} onChange={(event) => update("autoPost", event.target.checked)} /><span>Automatically record deposits when their scheduled date arrives</span></label>
-        <div className="button-row"><Button kind="primary" disabled={kind === "salary" ? number(form.annualSalary) <= 0 : number(form.amount) <= 0} onClick={save}><Icon name="save" />Save income</Button>{source && <Button kind="danger" onClick={remove}><Icon name="trash" />Delete</Button>}</div>
+        <div className="button-row"><Button kind="primary" disabled={kind === "salary" ? (number(form.annualSalary) <= 0 || (!isCanada && baseNetPay <= 0)) : number(form.amount) <= 0} onClick={save}><Icon name="save" />Save income</Button>{source && <Button kind="danger" onClick={remove}><Icon name="trash" />Delete</Button>}</div>
+      </div>
+    </Modal>
+  );
+}
+
+function BonusModal({ vault, salary, persist, notify, onClose }) {
+  const [amount, setAmount] = useState("");
+  const [date, setDate] = useState(todayISO());
+  const [description, setDescription] = useState("Bonus");
+  const [savingsPercent, setSavingsPercent] = useState(salary.savingsPercent ?? "");
+  function save() {
+    if (number(amount) <= 0 || !date) return;
+    const source = {
+      id: uid("income-source"),
+      kind: "bonus",
+      owner: salary.owner || "me",
+      name: `${salary.company || salary.name || "Salary"} - ${description.trim() || "Bonus"}`,
+      amount: number(amount),
+      frequency: "once",
+      nextDate: date,
+      savingsPercent: number(savingsPercent),
+      active: true,
+      autoPost: true,
+      createdAt: new Date().toISOString(),
+    };
+    persist((current) => ({ ...current, incomeSources: [source, ...current.incomeSources] }));
+    notify(date <= todayISO() ? "One-time bonus added to income." : "One-time bonus scheduled on the calendar.");
+    onClose();
+  }
+  return (
+    <Modal label="One-time income" title="Add salary bonus" onClose={onClose}>
+      <div className="form-stack">
+        <div className="security-banner"><span className="icon-box"><Icon name="banknote" /></span><div><strong>One deposit only</strong><div className="helper">This does not change the recurring salary rate.</div></div></div>
+        <Field label="Description"><Input value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
+        <div className="field-grid"><Field label="Net amount"><Input autoFocus inputMode="decimal" value={amount} placeholder="0.00" onChange={(event) => setAmount(event.target.value)} /></Field><Field label="Deposit date"><Input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></Field></div>
+        <Field label="Savings split %"><Input inputMode="decimal" min="0" max="100" value={savingsPercent} onChange={(event) => setSavingsPercent(event.target.value)} /></Field>
+        <Button kind="primary" disabled={number(amount) <= 0 || !date} onClick={save}><Icon name="save" />Save one-time bonus</Button>
       </div>
     </Modal>
   );
@@ -208,7 +318,11 @@ function BudgetPayslipReview({ prepared, draftValue, persist, notify, profileId,
         let matching = current.incomeSources.find((item) => item.kind === "salary" && item.owner === (draft.owner || "me"));
         if (draft.applyToIncome) {
           if (matching) {
-            matching = { ...matching, name: payslip.employer, company: payslip.employer, amount: payslip.netPay, frequency: draft.frequency || matching.frequency, nextDate: draft.nextDate || matching.nextDate };
+            let salaryHistory = [...(matching.salaryHistory || [])];
+            if (!salaryHistory.length) salaryHistory.push({ id: uid("salary-rate"), effectiveDate: matching.startDate || String(matching.createdAt || "").slice(0, 10) || "0000-01-01", reason: "Previous salary rate", amount: number(matching.amount), annualSalary: number(matching.annualSalary), province: matching.province, frequency: matching.frequency });
+            const actualRate = { id: uid("salary-rate"), effectiveDate: payDate, reason: "Payslip actual", amount: payslip.netPay, annualSalary: number(matching.annualSalary), province: matching.province, frequency: draft.frequency || matching.frequency, benefitsPerPay: number(matching.benefitsPerPay), rrspAnnual: number(matching.rrspAnnual), payAdjustments: matching.payAdjustments || [] };
+            salaryHistory = salaryHistory.some((item) => item.effectiveDate === payDate) ? salaryHistory.map((item) => item.effectiveDate === payDate ? { ...actualRate, id: item.id || actualRate.id } : item) : [...salaryHistory, actualRate];
+            matching = { ...matching, name: payslip.employer, company: payslip.employer, amount: payslip.netPay, frequency: draft.frequency || matching.frequency, nextDate: draft.nextDate || matching.nextDate, salaryHistory };
             incomeSources = current.incomeSources.map((item) => item.id === matching.id ? matching : item);
           } else {
             matching = { id: uid("income-source"), kind: "salary", owner: draft.owner || "me", name: payslip.employer, company: payslip.employer, amount: payslip.netPay, frequency: draft.frequency || "biweekly", nextDate: draft.nextDate || payDate, active: true, autoPost: true, savingsPercent: 0 };
@@ -267,18 +381,19 @@ function BudgetCategories({ vault, persist, notify, openModal }) {
   }
   return (
     <Card>
-      <CardHeader label="Category budgets" helper="Tap a category to manage scheduled details" />
+      <CardHeader label="Category budgets" helper="Use a direct amount, or add details and let their sum become the category total" action={<strong className="money">{money(totalBudgetAmount(vault), 0)}/mo</strong>} />
       {CATEGORIES.map((category) => {
         const actual = actuals.find((item) => item.category === category)?.actual || 0;
-        const budget = number(drafts[category]);
         const items = vault.budgetItems.filter((item) => item.category === category);
+        const detailsTotal = items.reduce((sum, item) => sum + number(item.amount), 0);
+        const budget = items.length ? detailsTotal : number(drafts[category]);
         return <div key={category} style={{ borderTop: "1px solid var(--line)" }}>
           <div className="row" style={{ borderTop: 0 }}>
-            <button type="button" className="button ghost" style={{ justifyContent: "flex-start", paddingLeft: 0 }} onClick={() => setExpanded(expanded === category ? "" : category)}><Icon name="chevron-down" />{category}</button>
-            <span className="inline-actions"><Input inputMode="decimal" value={drafts[category]} placeholder="0" aria-label={`${category} monthly budget`} onChange={(event) => setDrafts((current) => ({ ...current, [category]: event.target.value }))} onBlur={() => commit(category)} style={{ width: 84, textAlign: "right" }} /><span className="helper">/mo</span></span>
+            <button type="button" className="button ghost" style={{ justifyContent: "flex-start", paddingLeft: 0 }} onClick={() => setExpanded(expanded === category ? "" : category)}><Icon name="chevron-down" /><span style={{ display: "grid", textAlign: "left" }}>{category}<span className="helper">Total {money(budget, 0)}</span></span></button>
+            <span className="inline-actions"><Input inputMode="decimal" value={items.length ? detailsTotal : drafts[category]} disabled={items.length > 0} placeholder="0" aria-label={items.length ? `${category} total from details` : `${category} monthly budget`} onChange={(event) => setDrafts((current) => ({ ...current, [category]: event.target.value }))} onBlur={() => commit(category)} style={{ width: 76, textAlign: "right" }} /><span className="helper">{items.length ? "details" : "direct"}</span></span>
           </div>
           {budget > 0 && <div className={`progress ${actual > budget ? "over" : ""}`} style={{ marginBottom: expanded === category ? 8 : 10 }}><span style={{ width: `${Math.min(100, (actual / budget) * 100)}%` }} /></div>}
-          {expanded === category && <div style={{ paddingBottom: 10 }}>{items.map((item) => <div className="row" key={item.id}><span>{item.name}<br /><span className="helper">{item.scheduled ? `${FREQUENCY_LABELS[item.frequency]} from ${item.nextDate}` : "Budget detail"}</span></span><span className="row-actions"><strong className="money">{money(item.amount)}</strong><IconButton icon="trash" label="Remove detail" className="danger" onClick={() => removeItem(item)} /></span></div>)}<Button compact onClick={() => openModal({ content: <BudgetItemModal category={category} vault={vault} persist={persist} notify={notify} onClose={() => openModal(null)} /> })}><Icon name="plus" />Add detail</Button></div>}
+          {expanded === category && <div style={{ paddingBottom: 10 }}>{items.map((item) => <div className="row" key={item.id}><span>{item.name}<br /><span className="helper">{item.scheduled ? `${FREQUENCY_LABELS[item.frequency]} from ${item.nextDate}` : "Budget detail"}</span></span><span className="row-actions"><strong className="money">{money(item.amount)}</strong><IconButton icon="trash" label="Remove detail" className="danger" onClick={() => removeItem(item)} /></span></div>)}{items.length > 0 && <div className="row"><span>Details subtotal</span><strong className="money">{money(detailsTotal)}</strong></div>}<Button compact onClick={() => openModal({ content: <BudgetItemModal category={category} vault={vault} persist={persist} notify={notify} onClose={() => openModal(null)} /> })}><Icon name="plus" />Add detail</Button></div>}
         </div>;
       })}
     </Card>
@@ -310,16 +425,27 @@ function BudgetItemModal({ category, vault, persist, notify, onClose }) {
   );
 }
 
-function SavingsView({ vault, persist, notify }) {
+const SAVINGS_GOAL_TYPES = [
+  ["emergency", "Emergency fund"],
+  ["home", "House purchase"],
+  ["car", "Car purchase"],
+  ["general", "General savings"],
+  ["other", "Other"],
+];
+
+function SavingsView({ vault, persist, notify, openModal }) {
   const [direction, setDirection] = useState("to-savings");
   const [amount, setAmount] = useState("");
-  const [goal, setGoal] = useState(vault.settings.savingsGoal || "");
-  const progress = number(goal) ? (number(vault.settings.savingsBalance) / number(goal)) * 100 : 0;
+  const allocated = totalSavingsAllocated(vault);
+  const target = (vault.savingsGoals || []).reduce((sum, goal) => sum + number(goal.target), 0);
+  const progress = target > 0 ? allocated / target * 100 : 0;
+  const unallocated = Math.max(0, number(vault.settings.savingsBalance) - allocated);
   function transfer() {
     const value = number(amount);
     if (value <= 0) return;
     if (direction === "to-savings" && value > number(vault.settings.bankBalance)) { notify("The transfer is larger than the available bank balance."); return; }
     if (direction === "to-bank" && value > number(vault.settings.savingsBalance)) { notify("The transfer is larger than the savings balance."); return; }
+    if (direction === "to-bank" && number(vault.settings.savingsBalance) - value < allocated - 0.005) { notify("Reduce a goal allocation before moving earmarked savings back to the bank."); return; }
     const toSavings = direction === "to-savings";
     const record = { id: uid("savings-transfer"), date: todayISO(), direction, amount: value, createdAt: new Date().toISOString() };
     persist({ ...vault, savingsTransfers: [record, ...vault.savingsTransfers], settings: { ...vault.settings, bankBalance: number(vault.settings.bankBalance) + (toSavings ? -value : value), savingsBalance: number(vault.settings.savingsBalance) + (toSavings ? value : -value) } });
@@ -330,7 +456,7 @@ function SavingsView({ vault, persist, notify }) {
     <>
       <Card>
         <CardHeader label="Savings allocation" helper="A private bucket separate from available bank cash" />
-        <div className="metric-grid"><div className="metric-tile"><div className="label">Available</div><div className="metric-value">{money(vault.settings.bankBalance, 0)}</div><div className="helper">bank</div></div><div className="metric-tile saved"><div className="label">Savings</div><div className="metric-value">{money(vault.settings.savingsBalance, 0)}</div><div className="helper">protected bucket</div></div><div className="metric-tile"><div className="label">Goal</div><div className="metric-value">{Math.round(progress)}%</div><div className="helper">funded</div></div></div>
+        <div className="metric-grid"><div className="metric-tile"><div className="label">Available</div><div className="metric-value">{money(vault.settings.bankBalance, 0)}</div><div className="helper">bank</div></div><div className="metric-tile saved"><div className="label">Savings</div><div className="metric-value">{money(vault.settings.savingsBalance, 0)}</div><div className="helper">{money(unallocated, 0)} unallocated</div></div><div className="metric-tile"><div className="label">Goals</div><div className="metric-value">{Math.round(progress)}%</div><div className="helper">funded</div></div></div>
         <div className="progress" style={{ marginTop: 10 }}><span style={{ width: `${Math.min(100, progress)}%` }} /></div>
       </Card>
       <Card>
@@ -338,10 +464,58 @@ function SavingsView({ vault, persist, notify }) {
         <div className="form-stack"><Segmented columns={2} label="Transfer direction" value={direction} onChange={setDirection} options={[{ value: "to-savings", label: "Bank to savings" }, { value: "to-bank", label: "Savings to bank" }]} /><Field label="Amount"><Input inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} /></Field><Button kind="primary" disabled={number(amount) <= 0} onClick={transfer}><Icon name="savings" />Transfer</Button></div>
       </Card>
       <Card>
-        <CardHeader label="Savings goal" />
-        <Field label="Target balance"><Input inputMode="decimal" value={goal} onChange={(event) => setGoal(event.target.value)} onBlur={() => persist({ ...vault, settings: { ...vault.settings, savingsGoal: number(goal) } })} /></Field>
-        {vault.savingsTransfers.slice(0, 8).map((item) => <div className="row" key={item.id}><span>{item.date}<br /><span className="helper">{item.direction === "to-savings" ? "Added to savings" : "Moved back to bank"}</span></span><strong className={`money ${item.direction === "to-savings" ? "text-in" : "text-out"}`}>{item.direction === "to-savings" ? "+" : "-"}{money(item.amount)}</strong></div>)}
+        <CardHeader label="Savings goals" helper="Earmark money already held in savings" action={<Button compact onClick={() => openModal({ content: <SavingsGoalModal vault={vault} persist={persist} notify={notify} onClose={() => openModal(null)} /> })}><Icon name="plus" />Add goal</Button>} />
+        {(vault.savingsGoals || []).length ? vault.savingsGoals.map((goal) => {
+          const funded = number(goal.target) > 0 ? number(goal.allocated) / number(goal.target) * 100 : 0;
+          return <div className="goal-row" key={goal.id}><div className="row with-icon"><span className="icon-box" style={{ color: "var(--saved)" }}><Icon name={goal.type === "home" ? "home" : goal.type === "car" ? "car" : "savings"} /></span><span className="truncate"><strong>{goal.name}</strong><br /><span className="helper">{money(goal.allocated, 0)} of {money(goal.target, 0)}{goal.targetDate ? ` - target ${goal.targetDate}` : ""}</span></span><IconButton icon="edit" label={`Edit ${goal.name}`} onClick={() => openModal({ content: <SavingsGoalModal vault={vault} goal={goal} persist={persist} notify={notify} onClose={() => openModal(null)} /> })} /></div><div className="progress"><span style={{ width: `${Math.min(100, funded)}%` }} /></div></div>;
+        }) : <EmptyState icon="savings" title="Create a savings goal" helper="Emergency fund, house, car, or another target." />}
+      </Card>
+      <Card>
+        <CardHeader label="Savings history" helper="Bank and savings transfers" />
+        {vault.savingsTransfers.length ? vault.savingsTransfers.slice(0, 8).map((item) => <div className="row" key={item.id}><span>{item.date}<br /><span className="helper">{item.direction === "to-savings" ? "Added to savings" : "Moved back to bank"}</span></span><strong className={`money ${item.direction === "to-savings" ? "text-in" : "text-out"}`}>{item.direction === "to-savings" ? "+" : "-"}{money(item.amount)}</strong></div>) : <div className="helper">No savings transfers recorded yet.</div>}
       </Card>
     </>
+  );
+}
+
+function SavingsGoalModal({ vault, goal, persist, notify, onClose }) {
+  const [form, setForm] = useState(goal || { id: uid("savings-goal"), type: "emergency", name: "Emergency fund", target: "", allocated: "", targetDate: "" });
+  const [error, setError] = useState("");
+  const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  function changeType(type) {
+    const label = SAVINGS_GOAL_TYPES.find(([value]) => value === type)?.[1] || "Savings goal";
+    setForm((current) => ({ ...current, type, name: type === "other" ? "" : label }));
+  }
+  function save() {
+    const target = number(form.target);
+    const allocated = Math.max(0, number(form.allocated));
+    const available = Math.max(0, number(vault.settings.savingsBalance) - totalSavingsAllocated(vault, form.id));
+    if (!form.name?.trim() || target <= 0) { setError("Add a goal name and target greater than zero."); return; }
+    if (allocated > target + 0.005) { setError("Allocated savings cannot be greater than the goal target."); return; }
+    if (allocated > available + 0.005) { setError(`Only ${money(available)} is available to allocate to this goal.`); return; }
+    const item = { ...form, name: form.name.trim(), target, allocated, createdAt: form.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const exists = (vault.savingsGoals || []).some((entry) => entry.id === item.id);
+    persist({ ...vault, savingsGoals: exists ? vault.savingsGoals.map((entry) => entry.id === item.id ? item : entry) : [item, ...(vault.savingsGoals || [])] });
+    notify(exists ? "Savings goal updated." : "Savings goal added.");
+    onClose();
+  }
+  function remove() {
+    if (!goal || !window.confirm(`Delete ${goal.name}? Its allocation returns to unallocated savings.`)) return;
+    persist({ ...vault, savingsGoals: (vault.savingsGoals || []).filter((entry) => entry.id !== goal.id) });
+    notify("Savings goal removed. The money remains in savings.");
+    onClose();
+  }
+  return (
+    <Modal label="Savings" title={goal ? "Edit savings goal" : "Add savings goal"} onClose={onClose}>
+      <div className="form-stack">
+        <Field label="Goal type"><Select value={form.type} onChange={(event) => changeType(event.target.value)}>{SAVINGS_GOAL_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select></Field>
+        <Field label="Goal name"><Input value={form.name || ""} onChange={(event) => update("name", event.target.value)} /></Field>
+        <div className="field-grid"><Field label="Target amount"><Input inputMode="decimal" value={form.target ?? ""} onChange={(event) => update("target", event.target.value)} /></Field><Field label="Allocated now"><Input inputMode="decimal" value={form.allocated ?? ""} onChange={(event) => update("allocated", event.target.value)} /></Field></div>
+        <Field label="Target date (optional)"><Input type="date" value={form.targetDate || ""} onChange={(event) => update("targetDate", event.target.value)} /></Field>
+        <div className="privacy-note">Goal allocations only earmark your existing savings balance. They do not move money between accounts.</div>
+        {error && <div className="error-text">{error}</div>}
+        <div className="button-row"><Button kind="primary" onClick={save}><Icon name="save" />Save goal</Button>{goal && <Button kind="danger" onClick={remove}><Icon name="trash" />Delete</Button>}</div>
+      </div>
+    </Modal>
   );
 }
