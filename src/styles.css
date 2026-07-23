@@ -1327,6 +1327,48 @@ textarea::placeholder {
   line-height: 1.45;
 }
 
+.recovery-help {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.recovery-help summary {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  list-style: none;
+}
+
+.recovery-help summary::-webkit-details-marker {
+  display: none;
+}
+
+.recovery-help summary > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.recovery-help[open] summary > svg:last-child {
+  transform: rotate(180deg);
+}
+
+.recovery-help-body {
+  display: grid;
+  gap: 8px;
+  padding: 0 2px 12px;
+}
+
+.recovery-help-body strong {
+  color: var(--text);
+}
+
 .check-row {
   display: flex;
   align-items: flex-start;

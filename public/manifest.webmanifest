@@ -12,8 +12,8 @@
   "theme_color": "#121212",
   "categories": ["finance", "productivity"],
   "icons": [
-    { "src": "icon-192-v851.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "icon-512-v851.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icon-maskable-512-v851.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "icon-192-v852.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512-v852.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512-v852.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

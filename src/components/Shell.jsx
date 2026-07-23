@@ -376,7 +376,7 @@ function HouseholdModal({ vault, persist, notify, companion, installInfo, onInst
         <div className="row"><span>Last sent</span><strong>{summary.lastSentAt ? new Date(summary.lastSentAt).toLocaleString("en-CA", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Never"}</strong></div>
         <Button kind="primary" disabled={busy || pending === 0} onClick={() => sendUpdate(false)}><Icon name="share" />{busy ? "Preparing..." : "Send updates now"}</Button>
         <div className="card-header no-margin"><div><div className="label">Receive joint balance</div><div className="helper">Import the latest encrypted joint-account snapshot from the primary app</div></div></div>
-        <FileButton accept=".lakshmi-joint,application/vnd.lakshmi.joint-account+json,application/json" onFile={receiveJointUpdate} disabled={busy}><Icon name="restore" />Import joint update</FileButton>
+        <FileButton onFile={receiveJointUpdate} disabled={busy}><Icon name="restore" />Import joint update</FileButton>
         {vault.partnerSync?.lastJointImportedAt && <div className="helper">Last reconciled {new Date(vault.partnerSync.lastJointImportedAt).toLocaleString("en-CA", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</div>}
         <details className="settings-section"><summary><span><Icon name="restore" />Recovery</span><Icon name="chevron-down" /></summary><div className="settings-section-body"><div className="helper">Use a full resync only when the primary app reports a missing earlier update.</div><Button disabled={busy} onClick={() => sendUpdate(true)}><Icon name="sync" />Send full resync</Button></div></details>
         <div className="privacy-note">The update file is encrypted for this household. Choose the primary user in Messages, WhatsApp, Mail, or another share target.</div>
@@ -393,7 +393,7 @@ function HouseholdModal({ vault, persist, notify, companion, installInfo, onInst
         <div className="privacy-note">On Android, your partner opens the invitation in Chrome, creates the encrypted profile, then uses Install app. Receipt and card-statement capture are available in that private companion app.</div>
         {vault.householdLink?.enabled && <>
           <div className="card-header no-margin"><div><div className="label">Receive updates</div><div className="helper">Import the latest file your partner sent</div></div></div>
-          <FileButton accept=".lakshmi-update,application/vnd.lakshmi.partner-update+json,application/json" onFile={receiveUpdate} disabled={busy} kind="primary"><Icon name="upload" />Import partner update</FileButton>
+          <FileButton onFile={receiveUpdate} disabled={busy} kind="primary"><Icon name="upload" />Import partner update</FileButton>
           <div className="row"><span>Last received</span><strong>{summary.latest?.lastImportedAt ? new Date(summary.latest.lastImportedAt).toLocaleString("en-CA", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Never"}</strong></div>
           {summary.latest && <div className="helper">Imported through update #{summary.latest.lastSequence}. Re-importing the same file is safe and creates no duplicates.</div>}
           {vault.jointAccount?.enabled && <Button disabled={busy} onClick={shareJointUpdate}><Icon name="share" />Share joint-account update</Button>}
@@ -705,8 +705,8 @@ function SettingsModal({ vault, profile, profileId, keyObject, persist, notify, 
         <div className="row with-icon"><span className="icon-box"><Icon name="drive" /></span><span>Private device storage<br /><span className="helper">{vault.settings.storagePersistent ? "Persistent mode granted" : "Best-effort mode"}{estimate?.usage ? ` - ${(estimate.usage / 1048576).toFixed(1)} MB used` : ""} - {documents.length} document{documents.length === 1 ? "" : "s"}</span></span><span className={`status-pill ${vault.settings.storagePersistent ? "good" : "neutral"}`}>{vault.settings.storagePersistent ? "Protected" : "Local"}</span></div>
 
         <div className="card-header no-margin"><div><div className="label">Encrypted backups</div><div className="helper">Includes records and compressed document archive</div></div></div>
-        <div className="button-row"><Button kind="primary" disabled={busy} onClick={exportBackup}><Icon name="share" />Back up</Button><FileButton accept=".lakshmi,application/json" onFile={importBackup} disabled={busy}><Icon name="restore" />Import</FileButton></div>
-        <div className="privacy-note">iOS requires confirmation in the share sheet before writing to iCloud Drive, Google Drive, or Files.</div>
+        <div className="button-row"><Button kind="primary" disabled={busy} onClick={exportBackup}><Icon name="share" />Back up</Button><FileButton onFile={importBackup} disabled={busy}><Icon name="restore" />Import</FileButton></div>
+        <div className="privacy-note">iOS requires confirmation in the share sheet before writing to iCloud Drive, Google Drive, or Files. Import shows every file because iOS may not recognize the private .lakshmi extension; invalid files are rejected before they reach the vault.</div>
 
         <div className="card-header no-margin"><div><div className="label">Portable expense export</div><div className="helper">Expenses, refunds, income, cards, fuel, budgets, goals, joint transfers, and splits</div></div><Button compact disabled={busy} onClick={exportSpreadsheet}><Icon name="spreadsheet" />Excel</Button></div>
         <div className="privacy-note">Excel exports are intentionally unencrypted. Store or share them only where you trust the destination.</div>

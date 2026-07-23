@@ -1,3 +1,21 @@
+# Lakshmi 8.5.2
+
+This patch restores reliable encrypted-file selection on iPhone and makes the app's recovery boundary explicit.
+
+## Highlights
+
+- Backup, partner-update, and joint-account import pickers no longer hide custom Lakshmi files that iOS reports as an unknown type
+- Every selected import still passes the existing format, size, and encryption validation before any vault data is written
+- The lock screen now explains that profile names are local, quick unlock is device-only, and an encrypted backup cannot be reset without its original recovery passphrase
+- Home Screen artwork moves to a new `v852` URL so installed copies receive the release cleanly
+
+## Verification
+
+- Automated coverage confirms all encrypted import pickers are unrestricted while strict backup validation remains active
+- Production GitHub Pages build verifies the manifest and `/lakshmi/` launch path
+
+---
+
 # Lakshmi 8.5.1
 
 This patch prevents iPhone Home Screen installations from launching a hashed `/assets/` manifest path and returning GitHub Pages 404.

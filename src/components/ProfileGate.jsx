@@ -188,9 +188,17 @@ export default function ProfileGate({
         )}
 
         <div className="restore-box">
-          <div><div className="label">Restore encrypted backup</div><div className="helper">The original recovery passphrase is required.</div></div>
-          <FileButton accept=".lakshmi,application/json,application/vnd.lakshmi.backup+json" onFile={onImport} kind="primary" disabled={busy}><Icon name="upload" />Choose backup</FileButton>
+          <div><div className="label">Restore encrypted backup</div><div className="helper">The original recovery passphrase is required. Lakshmi validates the file after selection.</div></div>
+          <FileButton onFile={onImport} kind="primary" disabled={busy}><Icon name="upload" />Choose backup</FileButton>
         </div>
+        <details className="recovery-help">
+          <summary><span><Icon name="key" />Forgot profile or passphrase?</span><Icon name="chevron-down" /></summary>
+          <div className="recovery-help-body">
+            <div className="helper"><strong>No user ID is required.</strong> The profile names stored on this device appear above.</div>
+            <div className="helper"><strong>Try device unlock or the 4-digit PIN first.</strong> They work only while that local profile still exists.</div>
+            <div className="helper"><strong>A backup passphrase cannot be reset.</strong> Lakshmi has no account server or recovery copy of the encryption key. Without the original passphrase, the encrypted backup cannot be decrypted.</div>
+          </div>
+        </details>
         <div className="privacy-note">Each browser profile has an isolated encrypted database. Device unlock and PIN settings stay on this device and are not included in backups.</div>
       </section>
     </main>
