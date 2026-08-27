@@ -1,5 +1,28 @@
-const CACHE="lakshmi-v8-5-0-40fcc37052c7";
-const ASSETS=["./","./.nojekyll","./apple-touch-icon-v850.png","./apple-touch-icon.png","./assets/index-Ch0heVFm.js","./assets/index-Xw-GUMyx.css","./assets/pdf-DDn-YwtA.js","./assets/pdf.worker.min-BcGIa-xv.js","./assets/pdf.worker.min-DEtVeC4l.mjs","./icon-192-v850.png","./icon-192.png","./icon-512-v850.png","./icon-512.png","./icon-maskable-512-v850.png","./icon-maskable-512.png","./icon.svg","./index.html","./manifest.webmanifest","./vehicle-ratings-ca-2020-2026.json","./version.json"];
-self.addEventListener("install",event=>{event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)));self.skipWaiting();});
-self.addEventListener("activate",event=>{event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith("lakshmi-")&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim()));});
-self.addEventListener("fetch",event=>{if(event.request.method!=="GET")return;const url=new URL(event.request.url);if(event.request.mode==="navigate"){event.respondWith(fetch(event.request).then(response=>{if(response&&response.status===200){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put("./index.html",copy)).catch(()=>{});}return response;}).catch(()=>caches.match("./index.html")));return;}if(url.pathname.endsWith("/version.json")||url.pathname.endsWith("/manifest.webmanifest")){event.respondWith(fetch(event.request).then(response=>{if(response&&response.status===200){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy)).catch(()=>{});}return response;}).catch(()=>caches.match(event.request)));return;}event.respondWith(caches.match(event.request).then(hit=>hit||fetch(event.request).then(response=>{if(!response||response.status!==200||response.type==="opaque")return response;const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy)).catch(()=>{});return response;})).catch(()=>Response.error()));});
+const CACHE = "vidya-functional-beta-2026-08-26-v1";
+const CORE = ["./", "./index.html", "./styles.css", "./auth.js", "./app.js", "./assistant.js", "./config.js", "./manifest.json", "./icon-180.png", "./icon-192.png", "./icon-512.png", "./vendor/pdf.min.js", "./vendor/pdf.worker.min.js", "./vendor/mammoth.browser.min.js"];
+
+self.addEventListener("install", event => {
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener("activate", event => {
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim()));
+});
+
+self.addEventListener("fetch", event => {
+  if (event.request.method !== "GET" || new URL(event.request.url).origin !== self.location.origin) return;
+  event.respondWith(fetch(event.request).then(response => {
+    const copy = response.clone(); caches.open(CACHE).then(cache => cache.put(event.request, copy)); return response;
+  }).catch(() => caches.match(event.request).then(response => response || caches.match("./index.html"))));
+});
+
+self.addEventListener("notificationclick", event => {
+  event.notification.close();
+  const taskId = event.notification.data?.taskId || "";
+  const suffix = taskId ? `#action=reminder&task=${encodeURIComponent(taskId)}` : "#action=brief&kind=morning";
+  event.waitUntil(clients.matchAll({ type: "window", includeUncontrolled: true }).then(windows => {
+    const existing = windows[0];
+    if (existing) return existing.navigate(`./index.html${suffix}`).then(client => client.focus());
+    return clients.openWindow(`./index.html${suffix}`);
+  }));
+});
