@@ -1,0 +1,9 @@
+project_id = "vidya-os"
+
+# Vidya performs its own authentication because the personal beta uses a long,
+# random owner token stored inside the app's encrypted local vault. The same
+# endpoint also accepts a real Supabase user JWT for the later multi-device
+# upgrade and a separate secret for Cron. Never remove the checks in index.ts.
+[functions.vidya-ai]
+verify_jwt = false
+

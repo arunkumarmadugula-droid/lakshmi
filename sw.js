@@ -1,4 +1,4 @@
-const CACHE = "vidya-functional-beta-2026-08-26-v1";
+const CACHE = "vidya-final-2026-08-27-v2";
 const CORE = ["./", "./index.html", "./styles.css", "./auth.js", "./app.js", "./assistant.js", "./config.js", "./manifest.json", "./icon-180.png", "./icon-192.png", "./icon-512.png", "./vendor/pdf.min.js", "./vendor/pdf.worker.min.js", "./vendor/mammoth.browser.min.js"];
 
 self.addEventListener("install", event => {

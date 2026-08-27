@@ -1358,6 +1358,9 @@
     $("#sourceDialogTitle").textContent = doc.name;
     const visual = doc.imageData ? `<figure class="source-visual"><img src="${doc.imageData}" alt="Saved visual from ${esc(doc.name)}"><figcaption>Saved visual · use Ask Coach to interpret or connect it to your work.</figcaption></figure>` : "";
     $("#sourceDialogBody").innerHTML = `${visual}<div class="source-summary"><p>${esc(doc.summary)}</p><div class="source-keywords">${doc.keywords.map(word => `<span>${esc(word)}</span>`).join("")}</div></div><div class="source-passages"><h3>Searchable passages</h3>${doc.chunks.slice(0, 5).map(chunk => `<div class="passage"><b>${esc(chunk.loc)}</b><br>${esc(chunk.text.slice(0, 420))}${chunk.text.length > 420 ? "…" : ""}</div>`).join("")}</div>`;
+    const subjects = [...new Set(["Inbox", ...state.subjects, doc.subject])];
+    const organizer = `<label class="form-field source-organizer"><span>Stored in subject</span><select id="sourceSubjectSelect" aria-label="Move source to subject">${subjects.map(subject => `<option value="${esc(subject)}" ${subject === doc.subject ? "selected" : ""}>@${esc(subject)}</option>`).join("")}</select><small>@Inbox is a temporary staging shelf. Choose a lasting subject when you know where this belongs.</small></label>`;
+    $("#sourceDialogBody").insertAdjacentHTML("afterbegin", organizer);
     openDialog("sourceDialog");
   }
 
@@ -1612,6 +1615,15 @@
     });
 
     $$("dialog").forEach(dialog => dialog.addEventListener("click", event => { if (event.target === dialog) dialog.close(); }));
+    $("#sourceDialog").addEventListener("change", async event => {
+      if (event.target.id !== "sourceSubjectSelect" || !activeSourceId) return;
+      const doc = libraryDocs.find(item => item.id === activeSourceId); if (!doc) return;
+      const subject = event.target.value.trim() || "Inbox";
+      doc.subject = subject; ensureSubject(subject); await dbPut(doc); saveState();
+      state.selectedSubject = subject; renderLibrary();
+      $("#sourceDialogType").textContent = `${doc.type.toUpperCase()} · @${subject}`;
+      toast(`Moved to @${subject}`);
+    });
     $("#openSearch").addEventListener("click", () => { renderSearch(); openDialog("searchDialog"); setTimeout(() => $("#globalSearchInput").focus(), 80); });
     $("#mobileSearch").addEventListener("click", () => $("#openSearch").click());
     $("#openSettings").addEventListener("click", () => { updateSettingsUi(); openDialog("settingsDialog"); syncServerUsageSummary(); });
