@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { File } from "node:buffer";
 import test from "node:test";
-import { analyzeDocument } from "../src/lib/openai.js";
+import { analyzeDocument, askFinancialAssistant } from "../src/lib/openai.js";
 
 globalThis.File = File;
 
@@ -38,6 +38,24 @@ test("document analysis uses a private low-detail PDF request with structured ou
     assert.match(fileInput.file_data, /^data:application\/pdf;base64,/);
     assert.equal(result.usage.inputTokens, 100);
     assert.ok(result.usage.estimatedUsd > 0);
+  } finally {
+    globalThis.fetch = priorFetch;
+  }
+});
+
+test("financial copilot treats deterministic payload values as immutable", async () => {
+  const priorFetch = globalThis.fetch;
+  let request;
+  globalThis.fetch = async (url, options) => {
+    request = JSON.parse(options.body);
+    return new Response(JSON.stringify({ output: [{ type: "message", content: [{ type: "output_text", text: "- Tight month: $5,200\n- Keep the fixed-bills transfer." }] }], usage: {} }), { status: 200, headers: { "Content-Type": "application/json" } });
+  };
+  try {
+    await askFinancialAssistant({ apiKey: "sk-test", question: "Compare my month", payload: { deterministicFacts: { tightMonthly: 5200, surplusMonthly: 6500 } } });
+    assert.match(request.input[0].content, /immutable truth/i);
+    assert.match(request.input[0].content, /tight baseline pay-cycle horizon/i);
+    assert.match(request.input[1].content, /"tightMonthly":5200/);
+    assert.doesNotMatch(request.input[1].content, /Financial summary:/);
   } finally {
     globalThis.fetch = priorFetch;
   }

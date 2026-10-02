@@ -17,6 +17,7 @@ test("all six tabs render from a populated encrypted-vault shape", async () => {
       "/src/tabs/FuelTab.jsx",
     ].map((path) => server.ssrLoadModule(path)));
     const vault = createEmptyVault("Test household");
+    vault.settings.chartStartMonth = "2026-07";
     vault.settings.bankBalance = 5000;
     vault.settings.savingsBalance = 2000;
     vault.settings.balancesConfigured = true;

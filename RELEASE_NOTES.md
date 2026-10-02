@@ -1,3 +1,53 @@
+# Lakshmi 9.0.0
+
+This major release introduces the interactive Scenario Studio and a responsive Apple-inspired wealth interface while preserving Lakshmi's encrypted, local-first accounting model.
+
+## Highlights
+
+- A dedicated Budget > Studio workspace projects baseline and adjusted net worth across one to forty years
+- Five live levers control savings rate, annual return, inflation, horizon, and discretionary-spending reductions without posting anything to the ledger
+- Composable downturn, promotion, real-estate down-payment, and emergency-expense switches stress-test the same deterministic model
+- An inspectable SVG trajectory chart includes baseline and scenario curves, a return confidence band, year-by-year values, and an FI threshold when it falls inside the plotted range
+- Interactive asset-allocation and cash-flow distribution visuals explain the horizon result rather than showing a single unexplained total
+- KPI surfaces report projected net worth, inflation-adjusted financial-independence target, passive income, and first goal crossover
+- Obsidian and Porcelain themes use refined typography, translucent surfaces, subtle borders, diffused depth, tactile switches, and custom range controls
+- Desktop receives a wealth-dashboard navigation rail and wider analytical canvas; iPhone and Android retain the bottom navigation and edge-to-edge safe-area behavior
+- Scenario assumptions can be saved inside the encrypted vault, while simulations remain isolated from real balances and transactions
+- Home Screen artwork moves to a new `v900` URL so installed copies receive the release cleanly
+
+## Verification
+
+- 49 automated tests cover scenario calculations, event accounting, interactive rendering, encryption, financial planning, backups, and household sync
+- Mobile QA at 390 x 844 confirms zero horizontal overflow, edge-aligned navigation, live chart updates, and both Obsidian and Porcelain themes
+- Desktop QA at 1280 x 900 confirms the navigation rail, 1,084px analytical canvas, responsive cards, and interactive forecast inspection
+- Production GitHub Pages build verifies the manifest, versioned icons, service worker, and offline asset list
+
+---
+
+# Lakshmi 8.6.0
+
+This release turns the Budget area into a deterministic household-planning workspace while keeping every financial record local and encrypted.
+
+## Highlights
+
+- Weekly income now exposes exact 52-week monthly averages, a conservative four-paycheque baseline, and five-paycheque windfall months
+- Contractual, essential-variable, and discretionary spending are separated before calculating three- and six-month emergency-fund targets
+- A responsive savings runway compares Canadian surplus with an optional ring-fenced INR debt offset and responds live to four scenario sliders
+- Relocation planning compares shelter cost, avoided trips, fuel, and vehicle wear without changing saved ledger data until the scenario is explicitly saved
+- Foreign income and foreign debt remain in an isolated account and never inflate available Canadian bank cash
+- Pay-cycle smoothing, loan payoff schedules, insurance details, and small-purchase leak detection are available as compact planning drawers
+- Ask Lakshmi receives immutable aggregate facts instead of raw ledger rows and answers with concise horizon and trade-off comparisons
+- Switching Income, Budgets, and Savings returns the panel to the top instead of retaining an unrelated scroll position
+- Home Screen artwork moves to a new `v860` URL so installed copies receive the release cleanly
+
+## Verification
+
+- 45 automated tests cover deterministic planning, encrypted foreign-account posting, AI payload privacy, responsive simulators, accounting, backups, and household sync
+- Mobile QA at 390 x 844 confirms zero horizontal overflow, an edge-aligned bottom menu, and live SVG chart updates
+- Production GitHub Pages build verifies the manifest, versioned icons, service worker, and offline asset list
+
+---
+
 # Lakshmi 8.5.2
 
 This patch restores reliable encrypted-file selection on iPhone and makes the app's recovery boundary explicit.

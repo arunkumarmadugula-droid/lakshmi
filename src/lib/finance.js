@@ -1,5 +1,6 @@
 import { CATEGORY_COLORS } from "../data/defaults.js";
 import { addDays, currentMonth, monthKey, number, pad, shiftMonth, todayISO, uid } from "./format.js";
+import { detectDiscretionaryLeaks } from "./importers.js";
 
 export const PAY_PERIODS = {
   weekly: 52,
@@ -161,6 +162,193 @@ export function occurrencesInMonth(source, month) {
 export function monthlyEquivalent(amount, frequency) {
   const periods = frequency === "once" ? 0 : PAY_PERIODS[frequency] || 12;
   return periods ? (number(amount) * periods) / 12 : 0;
+}
+
+const FIXED_CONTRACTUAL_CATEGORIES = new Set(["Housing", "Utilities", "Telecom", "Internet", "Insurance", "Debt & EMI"]);
+const ESSENTIAL_VARIABLE_CATEGORIES = new Set(["Groceries", "Fuel", "Transport", "Health", "Kids"]);
+
+function roundMoney(value) {
+  return Math.round((number(value) + Number.EPSILON) * 100) / 100;
+}
+
+function tightPeriods(frequency) {
+  if (frequency === "weekly") return 4;
+  if (frequency === "biweekly" || frequency === "semimonthly") return 2;
+  if (frequency === "monthly") return 1;
+  return null;
+}
+
+function surplusPeriods(frequency) {
+  if (frequency === "weekly") return 5;
+  if (frequency === "biweekly") return 3;
+  return tightPeriods(frequency);
+}
+
+export function normalizeIncome(vault, date = todayISO(), scope = "household") {
+  const sources = (vault?.incomeSources || [])
+    .filter((source) => source.active !== false && source.frequency !== "once" && ownerMatches(source, scope))
+    .map((source) => {
+      const amount = incomeAmountOnDate(source, date);
+      const periods = PAY_PERIODS[source.frequency] || 12;
+      const tight = tightPeriods(source.frequency);
+      const surplus = surplusPeriods(source.frequency);
+      return {
+        id: source.id,
+        name: source.name || "Income",
+        owner: source.owner || "me",
+        frequency: source.frequency || "monthly",
+        amount: roundMoney(amount),
+        annual: roundMoney(amount * periods),
+        exactMonthly: roundMoney((amount * periods) / 12),
+        tightMonthly: roundMoney(tight == null ? (amount * periods) / 12 : amount * tight),
+        surplusMonthly: roundMoney(surplus == null ? (amount * periods) / 12 : amount * surplus),
+        tightPayCount: tight,
+        surplusPayCount: surplus,
+      };
+    });
+  return {
+    sources,
+    annual: roundMoney(sources.reduce((sum, source) => sum + source.annual, 0)),
+    exactMonthly: roundMoney(sources.reduce((sum, source) => sum + source.exactMonthly, 0)),
+    tightMonthly: roundMoney(sources.reduce((sum, source) => sum + source.tightMonthly, 0)),
+    surplusMonthly: roundMoney(sources.reduce((sum, source) => sum + source.surplusMonthly, 0)),
+  };
+}
+
+export function payCycleStatus(vault, month = currentMonth(), scope = "household") {
+  const source = (vault?.incomeSources || []).find((item) => item.active !== false && item.kind === "salary" && ["weekly", "biweekly"].includes(item.frequency) && ownerMatches(item, scope))
+    || (vault?.incomeSources || []).find((item) => item.active !== false && ["weekly", "biweekly"].includes(item.frequency) && ownerMatches(item, scope));
+  if (!source) return { count: 0, baseCount: 0, windfall: false, label: "Set pay schedule", tone: "neutral", dates: [] };
+  const dates = occurrencesInMonth(source, month);
+  const baseCount = source.frequency === "weekly" ? 4 : 2;
+  const windfall = dates.length > baseCount;
+  return {
+    count: dates.length,
+    baseCount,
+    windfall,
+    label: windfall ? "Surplus Windfall" : "Tight Cash Flow",
+    tone: windfall ? "windfall" : "tight",
+    dates,
+    sourceId: source.id,
+    frequency: source.frequency,
+  };
+}
+
+function categoryPlanningAmount(vault, category) {
+  const budgeted = budgetCategoryTotal(vault, category);
+  const recurring = (vault?.recurringExpenses || [])
+    .filter((item) => item.active !== false && item.category === category)
+    .reduce((sum, item) => sum + monthlyEquivalent(item.amount, item.frequency), 0);
+  return roundMoney(budgeted > 0 ? budgeted : recurring);
+}
+
+export function crossBorderPlan(vault) {
+  const settings = vault?.planning?.crossBorder || {};
+  const enabled = !!settings.enabled;
+  const monthlyIncomeForeign = Math.max(0, number(settings.monthlyIncomeForeign));
+  const monthlyDebtCad = Math.max(0, number(settings.monthlyDebtCad));
+  const cadPerForeignUnit = Math.max(0, number(settings.cadPerForeignUnit));
+  const incomeCadEquivalent = roundMoney(monthlyIncomeForeign * cadPerForeignUnit);
+  const debtOffsetCad = enabled ? roundMoney(Math.min(incomeCadEquivalent, monthlyDebtCad)) : 0;
+  return {
+    enabled,
+    foreignCurrency: settings.foreignCurrency || "INR",
+    ringFenced: settings.ringFenced !== false,
+    monthlyIncomeForeign: roundMoney(monthlyIncomeForeign),
+    monthlyDebtCad: roundMoney(monthlyDebtCad),
+    cadPerForeignUnit,
+    incomeCadEquivalent,
+    debtOffsetCad,
+    netVarianceCad: enabled ? roundMoney(incomeCadEquivalent - monthlyDebtCad) : 0,
+    debtForeignEquivalent: cadPerForeignUnit > 0 ? roundMoney(monthlyDebtCad / cadPerForeignUnit) : 0,
+  };
+}
+
+export function loanPayoffMonths({ balance = 0, annualRate = 0, monthlyPayment = 0 } = {}) {
+  const principal = Math.max(0, number(balance));
+  const payment = Math.max(0, number(monthlyPayment));
+  const monthlyRate = Math.max(0, number(annualRate)) / 1200;
+  if (!principal || !payment) return null;
+  if (!monthlyRate) return Math.ceil(principal / payment);
+  if (payment <= principal * monthlyRate) return Infinity;
+  return Math.ceil(-Math.log(1 - (principal * monthlyRate) / payment) / Math.log(1 + monthlyRate));
+}
+
+export function buildFinancialPlan(vault, date = todayISO(), scope = "household") {
+  const income = normalizeIncome(vault, date, scope);
+  const categories = [...new Set([
+    ...Object.keys(vault?.budgets || {}),
+    ...(vault?.budgetItems || []).map((item) => item.category),
+    ...(vault?.recurringExpenses || []).map((item) => item.category),
+  ].filter(Boolean))].map((category) => ({ category, amount: categoryPlanningAmount(vault, category) }));
+  const fixedContractualBurn = roundMoney(categories.filter((item) => FIXED_CONTRACTUAL_CATEGORIES.has(item.category)).reduce((sum, item) => sum + item.amount, 0));
+  const essentialVariableBurn = roundMoney(categories.filter((item) => ESSENTIAL_VARIABLE_CATEGORIES.has(item.category)).reduce((sum, item) => sum + item.amount, 0));
+  const totalBudget = roundMoney(categories.reduce((sum, item) => sum + item.amount, 0));
+  const essentialSurvivalBurn = roundMoney(fixedContractualBurn + essentialVariableBurn);
+  const discretionarySpend = roundMoney(Math.max(0, totalBudget - essentialSurvivalBurn));
+  const crossBorder = crossBorderPlan(vault);
+  const primary = income.sources.find((source) => source.frequency === "weekly") || income.sources.find((source) => source.frequency === "biweekly") || income.sources[0];
+  const fixedBillsTransferPerPay = primary ? roundMoney((fixedContractualBurn * 12) / (PAY_PERIODS[primary.frequency] || 12)) : 0;
+  return {
+    income,
+    categories,
+    contractualBreakdown: categories.filter((item) => FIXED_CONTRACTUAL_CATEGORIES.has(item.category) && item.amount > 0),
+    essentialBreakdown: categories.filter((item) => ESSENTIAL_VARIABLE_CATEGORIES.has(item.category) && item.amount > 0),
+    discretionaryBreakdown: categories.filter((item) => !FIXED_CONTRACTUAL_CATEGORIES.has(item.category) && !ESSENTIAL_VARIABLE_CATEGORIES.has(item.category) && item.amount > 0),
+    totalBudget,
+    fixedContractualBurn,
+    essentialVariableBurn,
+    essentialSurvivalBurn,
+    discretionarySpend,
+    emergencyReserve3: roundMoney(essentialSurvivalBurn * 3),
+    emergencyReserve6: roundMoney(essentialSurvivalBurn * 6),
+    baselineCadSurplus: roundMoney(income.tightMonthly - totalBudget),
+    averageCadSurplus: roundMoney(income.exactMonthly - totalBudget),
+    surplusMonthCadSurplus: roundMoney(income.surplusMonthly - totalBudget),
+    combinedSurplus: roundMoney(income.tightMonthly - totalBudget + crossBorder.debtOffsetCad),
+    fixedBillsTransferPerPay,
+    fixedBillsTransferFrequency: primary?.frequency || null,
+    crossBorder,
+  };
+}
+
+export function buildAIPayload(vault, month = currentMonth(), scope = "household") {
+  const stats = monthStats(vault, month, scope);
+  const plan = buildFinancialPlan(vault, `${month}-01`, scope);
+  const vehicle = (vault?.vehicles || []).find((item) => item.active !== false) || vault?.vehicles?.[0];
+  const fuel = fuelMetrics(vault, vehicle?.id);
+  return {
+    contractVersion: 1,
+    currency: vault?.profile?.currency || "CAD",
+    asOfDate: todayISO(),
+    selectedMonth: month,
+    deterministicFacts: {
+      normalizedIncome: plan.income,
+      fixedContractualBurn: plan.fixedContractualBurn,
+      essentialVariableBurn: plan.essentialVariableBurn,
+      essentialSurvivalBurn: plan.essentialSurvivalBurn,
+      discretionaryBudget: plan.discretionarySpend,
+      totalBudget: plan.totalBudget,
+      emergencyReserve3: plan.emergencyReserve3,
+      emergencyReserve6: plan.emergencyReserve6,
+      baselineCadSurplus: plan.baselineCadSurplus,
+      averageCadSurplus: plan.averageCadSurplus,
+      surplusMonthCadSurplus: plan.surplusMonthCadSurplus,
+      combinedSurplus: plan.combinedSurplus,
+      fixedBillsTransferPerPay: plan.fixedBillsTransferPerPay,
+      fixedBillsTransferFrequency: plan.fixedBillsTransferFrequency,
+      payCycle: payCycleStatus(vault, month, scope),
+      crossBorder: plan.crossBorder,
+      recordedMonth: { income: roundMoney(stats.income), spent: roundMoney(stats.spent), saved: roundMoney(stats.saved), cardPayments: roundMoney(stats.payments) },
+      categories: stats.categories.slice(0, 12).map((item) => ({ name: item.name, amount: roundMoney(item.value), percent: Math.round(item.percent) })),
+      budgetVariance: budgetActuals(vault, month, scope).slice(0, 12).map((item) => ({ category: item.category, budget: roundMoney(item.budget), actual: roundMoney(item.actual), variance: roundMoney(item.budget - item.actual) })),
+      emergencyAndSavings: { bankBalance: roundMoney(vault?.settings?.bankBalance), savingsBalance: roundMoney(vault?.settings?.savingsBalance), goals: (vault?.savingsGoals || []).map((goal) => ({ name: goal.name, target: roundMoney(goal.target), allocated: roundMoney(goal.allocated), targetDate: goal.targetDate || null })) },
+      cardBills: dueCards(vault, month, scope).map((item) => ({ dueDate: item.dueDate, amount: item.amount == null ? null : roundMoney(item.amount), paid: item.paid, paidAmount: roundMoney(item.paidAmount) })),
+      cashFlowTrend: availableHistory(vault, month, 6, scope).map((item) => ({ month: item.month, income: roundMoney(item.income), spent: roundMoney(item.spent), cardPayments: roundMoney(item.payments) })),
+      discretionaryLeaks: detectDiscretionaryLeaks(vault, month, scope),
+      fuel: vehicle ? { averageL100km: roundMoney(fuel.average), costPer100km: roundMoney(fuel.costPer100), kmTracked: roundMoney(fuel.kmTracked) } : null,
+    },
+  };
 }
 
 export function ownerMatches(record, scope = "household") {

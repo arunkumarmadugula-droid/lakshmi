@@ -6,7 +6,7 @@ import FuelTab from "../tabs/FuelTab.jsx";
 import LedgerTab from "../tabs/LedgerTab.jsx";
 import PricesTab from "../tabs/PricesTab.jsx";
 import OnboardingModal from "./OnboardingModal.jsx";
-import { applyDueSchedules, calendarEvents } from "../lib/finance.js";
+import { applyDueSchedules, calendarEvents, payCycleStatus } from "../lib/finance.js";
 import { currentMonth, downloadBlob, money, monthLabel, shiftMonth, todayISO } from "../lib/format.js";
 import {
   buildPartnerUpdate,
@@ -162,6 +162,7 @@ export default function Shell({ session, onLock, onProfileChange }) {
   }, [lock, vault.settings.autoLockMinutes]);
 
   const companion = vault.householdLink?.enabled && vault.householdLink?.role === "partner";
+  const payCycle = payCycleStatus(vault, currentMonth(), companion ? "partner" : "mine");
   const tabs = companion ? COMPANION_TABS : PRIMARY_TABS;
   const common = useMemo(() => ({ vault, persist, notify, openModal: setModal, profileId: session.profile.id, keyObject: session.key, companion, currentOwner: companion ? "partner" : "me" }), [vault, persist, notify, session, companion]);
   const views = {
@@ -177,7 +178,7 @@ export default function Shell({ session, onLock, onProfileChange }) {
         <header className="topbar">
           <div className="brand">
             <LotusLogo />
-            <div className="brand-copy"><span className="brand-name">Lakshmi</span><span className="tagline">Bills to wealth</span></div>
+            <div className="brand-stack"><div className="brand-copy"><span className="brand-name">Lakshmi</span><span className="tagline">Bills to wealth</span></div>{payCycle.count > 0 && <span className={`pay-cycle-pill ${payCycle.tone}`}>{payCycle.count} pays · {payCycle.label}</span>}</div>
           </div>
           <div className="top-actions">
             <IconButton icon={companion ? "sync" : "users"} label={companion ? "Send household updates" : "Linked household"} onClick={() => setModal("household")} />
@@ -689,9 +690,9 @@ function SettingsModal({ vault, profile, profileId, keyObject, persist, notify, 
     <Modal label="Settings" title="Appearance and privacy" onClose={onClose}>
       <div className="form-stack">
         <div><div className="label" style={{ marginBottom: 8 }}>Theme</div><div className="theme-options">{[
-          ["default", "Black and white", ["#121212", "#2d2d2d", "#f4f2ec"]],
-          ["lotus", "Lotus light", ["#f3f1ec", "#ffffff", "#d8a443"]],
-          ["bright", "Fun and bright", ["#fff8f1", "#ff7a8a", "#4f9de8"]],
+          ["default", "Obsidian", ["#0a0a0c", "#16161a", "#d4af37"]],
+          ["lotus", "Porcelain", ["#fbfbfd", "#f5f5f7", "#b08a22"]],
+          ["bright", "Skyline", ["#edf6ff", "#ffffff", "#0a84ff"]],
         ].map(([value, label, colors]) => <button type="button" key={value} className="theme-choice" aria-pressed={vault.settings.theme === value} onClick={() => persist({ ...vault, settings: { ...vault.settings, theme: value } })}><span className="theme-preview">{colors.map((color) => <i key={color} style={{ background: color }} />)}</span>{label}</button>)}</div></div>
 
         <div className="row with-icon"><span className="icon-box"><Icon name="sync" /></span><span>Lakshmi {APP_VERSION}<br /><span className="helper">{updateStatus || `Charts begin ${monthLabel(vault.settings.chartStartMonth, "short")}`}</span></span><Button compact disabled={busy} onClick={checkForUpdate}><Icon name="sync" />Check</Button></div>

@@ -196,7 +196,7 @@ export function Textarea({ className = "", ...props }) {
 
 export function Segmented({ options, value, onChange, label, columns }) {
   return (
-    <div className={`segmented ${columns === 2 ? "two" : ""}`} role="tablist" aria-label={label}>
+    <div className="segmented" role="tablist" aria-label={label} style={{ "--segment-columns": columns || options.length }}>
       {options.map((option) => (
         <button key={option.value} type="button" role="tab" aria-selected={value === option.value} onClick={() => onChange(option.value)}>
           {option.label}

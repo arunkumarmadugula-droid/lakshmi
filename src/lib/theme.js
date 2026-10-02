@@ -2,9 +2,9 @@ const THEME_CLASSES = ["theme-default", "theme-lotus", "theme-bright"];
 const REMEMBERED_THEME_KEY = "lakshmi-ui-theme";
 
 const THEME_CHROME = {
-  default: { app: "#121212", frame: "#202020", surface: "#2d2d2d", statusBar: "black-translucent" },
-  lotus: { app: "#edebe6", frame: "#f6f5f1", surface: "#ffffff", statusBar: "default" },
-  bright: { app: "#eaf5ff", frame: "#fffdf8", surface: "#ffffff", statusBar: "default" },
+  default: { app: "#0a0a0c", frame: "#101013", surface: "#16161a", statusBar: "black-translucent" },
+  lotus: { app: "#fbfbfd", frame: "#f5f5f7", surface: "#fbfbfd", statusBar: "default" },
+  bright: { app: "#edf6ff", frame: "#fbfbfd", surface: "#ffffff", statusBar: "default" },
 };
 
 export function normalizeTheme(value) {

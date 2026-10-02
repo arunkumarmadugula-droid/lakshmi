@@ -1,4 +1,4 @@
-export const APP_VERSION = "8.5.2";
+export const APP_VERSION = "9.0.0";
 
 export function compareVersions(left, right) {
   const a = String(left || "").split(".").map((part) => Number(part) || 0);

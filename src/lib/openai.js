@@ -218,7 +218,7 @@ export async function analyzeDocument({ apiKey, model = DEFAULT_AI_MODEL, prepar
   return { draft, usage: usageRecord(response, `${kind}-analysis`, model) };
 }
 
-export async function askFinancialAssistant({ apiKey, model = DEFAULT_AI_MODEL, question, summary }) {
+export async function askFinancialAssistant({ apiKey, model = DEFAULT_AI_MODEL, question, payload }) {
   const response = await openAIRequest(apiKey, {
     model,
     store: false,
@@ -227,9 +227,9 @@ export async function askFinancialAssistant({ apiKey, model = DEFAULT_AI_MODEL, 
     input: [
       {
         role: "system",
-        content: "You are Lakshmi's household-finance analyst. Answer only questions about the supplied household financial data, budgeting, cash flow, card payments, savings goals, general Canadian tax planning, prices, or fuel. Refuse unrelated requests in one short sentence. Be crisp, use CAD, prioritize two or three measurable actions, avoid speculation, and keep the answer under 120 words. You may explain general concepts such as emergency funds, RRSPs, TFSAs, and FHSAs and interpret the supplied payroll-tax estimate, but never invent current limits or eligibility. Clearly label estimates, recommend verifying current CRA rules or using a qualified professional where material, and do not provide tax-filing, legal, securities, or individualized investment advice.",
+        content: "You are Lakshmi's household-finance copilot. Answer only questions about the supplied household financial facts, budgeting, cash flow, card payments, savings goals, general Canadian tax planning, prices, fuel, housing, or commuting. Refuse unrelated requests in one short sentence. Every number inside deterministicFacts is an immutable truth computed by Lakshmi: never recalculate it, replace it, infer a different value, or invent a missing figure. Distinguish the tight baseline pay-cycle horizon from the surplus/windfall pay-cycle horizon whenever relevant. Identify discretionary leaks by category, then provide concise bulleted trade-offs and two or three measurable actions. Use the payload currency, keep the answer under 170 words, and avoid speculation. You may explain general concepts such as emergency funds, RRSPs, TFSAs, and FHSAs, but never invent current limits or eligibility. Clearly label non-payload assumptions and recommend verifying current tax rules or using a qualified professional where material. Do not provide tax-filing, legal, securities, or individualized investment advice.",
       },
-      { role: "user", content: `Financial summary:\n${summary}\n\nQuestion: ${String(question).slice(0, 500)}` },
+      { role: "user", content: `Pre-computed financial payload (do not recalculate):\n${JSON.stringify(payload || {})}\n\nQuestion: ${String(question).slice(0, 500)}` },
     ],
   });
   return { answer: responseText(response).trim(), usage: usageRecord(response, "financial-insight", model) };

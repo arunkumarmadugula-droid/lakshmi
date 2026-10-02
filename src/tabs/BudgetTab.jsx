@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { BUDGET_SUBCATEGORIES, CATEGORIES } from "../data/defaults.js";
-import { budgetActuals, estimatePayroll, FREQUENCY_LABELS, incomeAmountOnDate, monthStats, monthlyEquivalent, PROVINCE_OPTIONS, salaryVersionOnDate, totalBudgetAmount, totalSavingsAllocated } from "../lib/finance.js";
+import { budgetActuals, buildAIPayload, buildFinancialPlan, estimatePayroll, FREQUENCY_LABELS, incomeAmountOnDate, loanPayoffMonths, monthStats, monthlyEquivalent, PROVINCE_OPTIONS, salaryVersionOnDate, totalBudgetAmount, totalSavingsAllocated } from "../lib/finance.js";
 import { currentMonth, money, number, todayISO, uid } from "../lib/format.js";
-import { parseAiResult, prepareDocument } from "../lib/importers.js";
-import { analyzeDocument } from "../lib/openai.js";
-import { storeEncryptedDocument } from "../lib/vaultDb.js";
+import { detectDiscretionaryLeaks, parseAiResult, prepareDocument } from "../lib/importers.js";
+import { analyzeDocument, askFinancialAssistant } from "../lib/openai.js";
+import { postRingFencedForeignMonth, storeEncryptedDocument } from "../lib/vaultDb.js";
 import { Button, Card, CardHeader, EmptyState, Field, FileButton, Icon, IconButton, Input, Modal, Segmented, Select } from "../components/ui.jsx";
+import RelocationAffordabilitySimulator from "../components/RelocationAffordabilitySimulator.jsx";
+import SavingsRunwaySimulator from "../components/SavingsRunwaySimulator.jsx";
+import ScenarioStudio from "../components/ScenarioStudio.jsx";
 
 export default function BudgetTab({ vault, persist, notify, openModal, profileId, keyObject }) {
   const [mode, setMode] = useState("income");
@@ -20,10 +23,17 @@ export default function BudgetTab({ vault, persist, notify, openModal, profileId
   const activeSalary = salary ? { ...salary, ...(activeVersion || {}) } : null;
   const activePayroll = isCanada && activeSalary?.annualSalary ? estimatePayroll({ annualSalary: activeSalary.annualSalary, province: activeSalary.province || vault.settings.province, frequency: activeSalary.frequency, rrspAnnual: activeSalary.rrspAnnual, benefitsPerPay: activeSalary.benefitsPerPay }) : null;
   const activeNetPay = salary ? incomeAmountOnDate(salary, todayISO()) : 0;
+  const financialPlan = useMemo(() => buildFinancialPlan(vault), [vault]);
+  const activeVehicle = vault.vehicles.find((item) => item.active !== false) || vault.vehicles[0];
+  const leaks = useMemo(() => detectDiscretionaryLeaks(vault, currentMonth()), [vault]);
 
   useEffect(() => {
     if (salaries.length && !salaries.some((item) => item.id === salaryId)) setSalaryId(salaries[0].id);
   }, [salaries, salaryId]);
+
+  useEffect(() => {
+    document.querySelector(".screen")?.scrollTo({ top: 0, behavior: "auto" });
+  }, [mode]);
 
   async function uploadPayslip(file) {
     try {
@@ -50,7 +60,8 @@ export default function BudgetTab({ vault, persist, notify, openModal, profileId
 
   return (
     <>
-      <Segmented label="Budget view" value={mode} onChange={setMode} options={[{ value: "income", label: "Income" }, { value: "budgets", label: "Budgets" }, { value: "savings", label: "Savings" }]} />
+      {mode !== "studio" && <PlanningKpis plan={financialPlan} vault={vault} />}
+      <Segmented columns={4} label="Budget view" value={mode} onChange={setMode} options={[{ value: "income", label: "Income" }, { value: "budgets", label: "Budgets" }, { value: "savings", label: "Savings" }, { value: "studio", label: "Studio" }]} />
       {mode === "income" && (
         <>
           <Card>
@@ -120,8 +131,125 @@ export default function BudgetTab({ vault, persist, notify, openModal, profileId
       )}
 
       {mode === "budgets" && <BudgetCategories vault={vault} persist={persist} notify={notify} openModal={openModal} />}
-      {mode === "savings" && <SavingsView vault={vault} persist={persist} notify={notify} openModal={openModal} />}
+      {mode === "savings" && <>
+        <CrossBorderPlanner vault={vault} plan={financialPlan} persist={persist} notify={notify} />
+        <SavingsRunwaySimulator plan={financialPlan} startingSavings={vault.settings.savingsBalance} />
+        <RelocationAffordabilitySimulator config={vault.planning.relocation} vehicle={activeVehicle} onSave={(relocation) => { persist((current) => ({ ...current, planning: { ...current.planning, relocation } })); notify("Relocation scenario saved."); }} />
+        <LeakDetector leaks={leaks} />
+        <BudgetCopilot vault={vault} persist={persist} />
+        <SavingsView vault={vault} persist={persist} notify={notify} openModal={openModal} />
+      </>}
+      {mode === "studio" && <ScenarioStudio vault={vault} plan={financialPlan} persist={persist} notify={notify} />}
     </>
+  );
+}
+
+function PlanningKpis({ plan, vault }) {
+  const loans = (vault.budgetItems || []).filter((item) => item.category === "Debt & EMI");
+  const policies = (vault.budgetItems || []).filter((item) => item.category === "Insurance");
+  return (
+    <Card className="planning-kpis">
+      <CardHeader label="Deterministic plan" helper="Exact averages and conservative 4-paycheque baseline" />
+      <div className="planning-metric-grid">
+        <div className="planning-metric cyan"><div className="label">Monthly net pay</div><strong>{money(plan.income.exactMonthly, 0)}</strong><span>{money(plan.income.tightMonthly, 0)} tight month</span></div>
+        <div className="planning-metric"><div className="label">Essential burn</div><strong>{money(plan.essentialSurvivalBurn, 0)}</strong><span>{money(plan.fixedContractualBurn, 0)} contractual</span></div>
+        <div className={`planning-metric ${plan.baselineCadSurplus >= 0 ? "cyan" : "rose"}`}><div className="label">Baseline CAD surplus</div><strong>{money(plan.baselineCadSurplus, 0)}</strong><span>after all budgets</span></div>
+        <div className={`planning-metric ${plan.combinedSurplus >= 0 ? "emerald" : "rose"}`}><div className="label">Combined surplus</div><strong>{money(plan.combinedSurplus, 0)}</strong><span>{plan.crossBorder.enabled ? "with INR debt offset" : "CAD only"}</span></div>
+      </div>
+      <details className="settings-section scenario-drawer"><summary><span><Icon name="banknote" />Pay-cycle smoothing</span><Icon name="chevron-down" /></summary><div className="settings-section-body"><div className="row"><span>Transfer to fixed-bills account</span><strong className="money text-in">{money(plan.fixedBillsTransferPerPay)}/{plan.fixedBillsTransferFrequency === "weekly" ? "week" : plan.fixedBillsTransferFrequency === "biweekly" ? "pay" : "deposit"}</strong></div><div className="row"><span>Contractual burn</span><strong>{money(plan.fixedContractualBurn)}/mo</strong></div>{plan.contractualBreakdown.map((item) => <div className="row compact-row" key={item.category}><span>{item.category}</span><span>{money(item.amount)}</span></div>)}<div className="privacy-note">This equalized transfer reserves one annual cycle of fixed bills across every scheduled pay, preventing biweekly deductions from colliding with short calendar months.</div></div></details>
+      <details className="settings-section"><summary><span><Icon name="car" />Loan payoff schedules</span><Icon name="chevron-down" /></summary><div className="settings-section-body">{loans.length ? loans.map((loan) => { const months = loanPayoffMonths({ balance: loan.balance, annualRate: loan.interestRate, monthlyPayment: loan.amount }); return <div className="row" key={loan.id}><span>{loan.name}<br /><span className="helper">{number(loan.interestRate).toFixed(2)}% APR · {money(loan.balance)} remaining</span></span><strong>{months === Infinity ? "Payment too low" : months ? `${months} mo` : `${money(loan.amount)}/mo`}</strong></div>; }) : <div className="privacy-note">Add balance and APR to a Debt & EMI budget detail to calculate its payoff horizon.</div>}</div></details>
+      <details className="settings-section"><summary><span><Icon name="shield" />Insurance policies</span><Icon name="chevron-down" /></summary><div className="settings-section-body">{policies.length ? policies.map((policy) => <div className="row" key={policy.id}><span>{policy.name}<br /><span className="helper">{policy.policyType || "Policy"}{policy.renewalDate ? ` · renews ${policy.renewalDate}` : ""}</span></span><strong>{money(policy.amount)}/mo</strong></div>) : <div className="privacy-note">Insurance budget details will appear here with their renewal dates.</div>}</div></details>
+    </Card>
+  );
+}
+
+function CrossBorderPlanner({ vault, plan, persist, notify }) {
+  const [draft, setDraft] = useState(vault.planning.crossBorder);
+  useEffect(() => setDraft(vault.planning.crossBorder), [vault.planning.crossBorder]);
+  const update = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
+  const inr = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 });
+  const incomeCad = number(draft.monthlyIncomeForeign) * number(draft.cadPerForeignUnit);
+  const debtOffset = draft.enabled ? Math.min(incomeCad, number(draft.monthlyDebtCad)) : 0;
+  const netVariance = draft.enabled ? incomeCad - number(draft.monthlyDebtCad) : 0;
+  const foreignAccount = (vault.foreignAccounts || []).find((account) => account.id === "india-ring-fence");
+  function save() {
+    const crossBorder = {
+      ...draft,
+      enabled: !!draft.enabled,
+      monthlyIncomeForeign: Math.max(0, number(draft.monthlyIncomeForeign)),
+      monthlyDebtCad: Math.max(0, number(draft.monthlyDebtCad)),
+      cadPerForeignUnit: Math.max(0, number(draft.cadPerForeignUnit)),
+      openingBalanceForeign: Math.max(0, number(draft.openingBalanceForeign)),
+      ringFenced: true,
+    };
+    persist((current) => {
+      const existing = (current.foreignAccounts || []).find((item) => item.id === "india-ring-fence");
+      const account = { ...(existing || {}), id: "india-ring-fence", name: "India ring-fenced account", currency: crossBorder.foreignCurrency || "INR", balance: existing ? number(existing.balance) : crossBorder.openingBalanceForeign, ringFenced: true, updatedAt: new Date().toISOString() };
+      const accounts = existing ? current.foreignAccounts.map((item) => item.id === account.id ? account : item) : [account, ...(current.foreignAccounts || [])];
+      return { ...current, planning: { ...current.planning, crossBorder }, foreignAccounts: accounts };
+    });
+    notify("Cross-border assumptions saved without changing the CAD bank balance.");
+  }
+  function recordMonth() {
+    try {
+      const prepared = { ...vault, planning: { ...vault.planning, crossBorder: { ...draft, enabled: !!draft.enabled, monthlyIncomeForeign: number(draft.monthlyIncomeForeign), monthlyDebtCad: number(draft.monthlyDebtCad), cadPerForeignUnit: number(draft.cadPerForeignUnit), openingBalanceForeign: number(draft.openingBalanceForeign), ringFenced: true } } };
+      const result = postRingFencedForeignMonth(prepared);
+      if (!result.applied) { notify("This foreign-income month is already recorded."); return; }
+      persist(result.vault);
+      notify(`${inr.format(result.netForeign)} net movement recorded in the ring-fenced account. CAD cash was unchanged.`);
+    } catch (reason) {
+      notify(reason.message || "The foreign month could not be recorded.");
+    }
+  }
+  return (
+    <Card className="planning-card">
+      <CardHeader label="Cross-border isolator" title="INR income → India EMI" helper="Foreign cash stays ring-fenced and only its debt offset enters the CAD plan" />
+      <div className="cross-border-flow"><span>{inr.format(number(draft.monthlyIncomeForeign))}<small>foreign inflow</small></span><Icon name="right" /><span>{money(debtOffset)}<small>CAD debt offset</small></span><Icon name="right" /><span className={netVariance >= 0 ? "text-in" : "text-out"}>{money(netVariance)}<small>net FX variance</small></span></div>
+      {foreignAccount && <div className="row"><span>Ring-fenced balance</span><strong>{inr.format(number(foreignAccount.balance))}</strong></div>}
+      <details className="settings-section scenario-drawer"><summary><span><Icon name="settings" />Foreign exchange assumptions</span><Icon name="chevron-down" /></summary><div className="settings-section-body form-stack"><label className="check-row"><input type="checkbox" checked={!!draft.enabled} onChange={(event) => update("enabled", event.target.checked)} /><span>Apply the foreign income offset to planning</span></label><div className="field-grid"><Field label="Monthly INR income"><Input inputMode="decimal" value={draft.monthlyIncomeForeign ?? ""} onChange={(event) => update("monthlyIncomeForeign", event.target.value)} /></Field><Field label="India EMI, CAD equivalent"><Input inputMode="decimal" value={draft.monthlyDebtCad ?? ""} onChange={(event) => update("monthlyDebtCad", event.target.value)} /></Field></div><div className="field-grid"><Field label="CAD per INR assumption"><Input inputMode="decimal" value={draft.cadPerForeignUnit ?? ""} onChange={(event) => update("cadPerForeignUnit", event.target.value)} /></Field><Field label="Opening INR balance"><Input inputMode="decimal" value={draft.openingBalanceForeign ?? ""} onChange={(event) => update("openingBalanceForeign", event.target.value)} /></Field></div><div className="button-row"><Button compact onClick={save}><Icon name="save" />Save assumptions</Button><Button compact disabled={!draft.enabled || !number(draft.cadPerForeignUnit)} onClick={recordMonth}><Icon name="plus" />Record this month</Button></div></div></details>
+      <div className="privacy-note">No FX transfer is created and no amount is added to available Canadian cash. The exchange rate is a user-controlled planning assumption.</div>
+    </Card>
+  );
+}
+
+function LeakDetector({ leaks }) {
+  return (
+    <Card className="planning-card leak-card">
+      <CardHeader label="Discretionary leak detector" title={leaks.length ? "Small purchases crossed the monthly threshold" : "No small-purchase leak detected"} helper="Recurring non-essential transactions below $50 are tested against a combined $300 monthly threshold" />
+      {leaks.length ? leaks.map((leak) => <div className="row" key={leak.category}><span>{leak.category}<br /><span className="helper">{leak.count} purchases · {money(leak.average)} average{leak.recurringMerchants.length ? ` · ${leak.recurringMerchants.map((item) => item.name).join(", ")}` : ""}</span></span><strong className="money text-out">{money(leak.total)}</strong></div>) : <div className="privacy-note">Lakshmi will surface dining, subscription, shopping, and entertainment patterns when qualifying small purchases exceed $300 in one month.</div>}
+    </Card>
+  );
+}
+
+function BudgetCopilot({ vault, persist }) {
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const suggestions = ["Compare my tight and surplus months", "Which discretionary leaks should I cut?", "How quickly can I reach a 6-month reserve?"];
+  async function ask() {
+    if (!question.trim()) return;
+    if (!vault.ai?.apiKey) { setError("Add an OpenAI API key from protected Settings first."); return; }
+    setBusy(true);
+    setError("");
+    try {
+      const result = await askFinancialAssistant({ apiKey: vault.ai.apiKey, model: vault.ai.model, question, payload: buildAIPayload(vault, currentMonth()) });
+      setAnswer(result.answer);
+      await persist((current) => ({ ...current, ai: { ...current.ai, usage: [result.usage, ...(current.ai?.usage || [])].slice(0, 500) } }));
+    } catch (reason) {
+      setError(reason.message || "Ask Lakshmi is unavailable.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Card className="planning-card ai-copilot-card">
+      <CardHeader label="AI copilot" title="Ask Lakshmi" helper="Uses pre-computed facts, not raw ledger rows" />
+      <div className="copilot-query"><Input value={question} maxLength={500} placeholder="Ask about cash flow, trade-offs, or goals" onChange={(event) => setQuestion(event.target.value)} onKeyDown={(event) => event.key === "Enter" && ask()} /><Button kind="primary" disabled={busy || !question.trim()} onClick={ask}><Icon name="ai" />{busy ? "Thinking" : "Ask"}</Button></div>
+      {answer && <div className="ai-answer copilot-answer">{answer}</div>}
+      {error && <div className="error-text">{error}</div>}
+      <div className="ai-suggestions">{suggestions.map((suggestion) => <button type="button" key={suggestion} onClick={() => { setQuestion(suggestion); setAnswer(""); setError(""); }}>{suggestion}</button>)}</div>
+    </Card>
   );
 }
 
@@ -401,11 +529,11 @@ function BudgetCategories({ vault, persist, notify, openModal }) {
 }
 
 function BudgetItemModal({ category, vault, persist, notify, onClose }) {
-  const [form, setForm] = useState({ name: BUDGET_SUBCATEGORIES[category]?.[0] || "Other", customName: "", amount: "", scheduled: false, frequency: "monthly", nextDate: todayISO(), autoPost: false, paymentMethod: "bank" });
+  const [form, setForm] = useState({ name: BUDGET_SUBCATEGORIES[category]?.[0] || "Other", customName: "", amount: "", scheduled: false, frequency: "monthly", nextDate: todayISO(), autoPost: false, paymentMethod: "bank", balance: "", interestRate: "", policyType: "", renewalDate: "" });
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   function save() {
     const name = form.name === "Other" ? form.customName.trim() || "Other" : form.name;
-    const item = { id: uid("budget-item"), category, name, amount: number(form.amount), scheduled: form.scheduled, frequency: form.frequency, nextDate: form.nextDate, autoPost: form.autoPost, paymentMethod: form.paymentMethod };
+    const item = { id: uid("budget-item"), category, name, amount: number(form.amount), scheduled: form.scheduled, frequency: form.frequency, nextDate: form.nextDate, autoPost: form.autoPost, paymentMethod: form.paymentMethod, ...(category === "Debt & EMI" ? { balance: number(form.balance), interestRate: number(form.interestRate) } : {}), ...(category === "Insurance" ? { policyType: form.policyType.trim(), renewalDate: form.renewalDate } : {}) };
     const recurring = form.scheduled ? { id: uid("recurring"), budgetItemId: item.id, category, name, amount: item.amount, frequency: item.frequency, nextDate: item.nextDate, autoPost: item.autoPost, paymentMethod: item.paymentMethod, active: true } : null;
     persist({ ...vault, budgetItems: [item, ...vault.budgetItems], recurringExpenses: recurring ? [recurring, ...vault.recurringExpenses] : vault.recurringExpenses });
     notify("Budget detail saved.");
@@ -417,6 +545,8 @@ function BudgetItemModal({ category, vault, persist, notify, onClose }) {
         <Field label="Item"><Select value={form.name} onChange={(event) => update("name", event.target.value)}>{(BUDGET_SUBCATEGORIES[category] || ["Other"]).map((item) => <option key={item}>{item}</option>)}</Select></Field>
         {form.name === "Other" && <Field label="Name"><Input value={form.customName} onChange={(event) => update("customName", event.target.value)} /></Field>}
         <Field label="Monthly amount"><Input inputMode="decimal" value={form.amount} onChange={(event) => update("amount", event.target.value)} /></Field>
+        {category === "Debt & EMI" && <div className="field-grid"><Field label="Remaining balance"><Input inputMode="decimal" value={form.balance} onChange={(event) => update("balance", event.target.value)} /></Field><Field label="Annual rate %"><Input inputMode="decimal" value={form.interestRate} onChange={(event) => update("interestRate", event.target.value)} /></Field></div>}
+        {category === "Insurance" && <div className="field-grid"><Field label="Policy type"><Input value={form.policyType} placeholder="Auto, home, life" onChange={(event) => update("policyType", event.target.value)} /></Field><Field label="Renewal date"><Input type="date" value={form.renewalDate} onChange={(event) => update("renewalDate", event.target.value)} /></Field></div>}
         <label className="check-row"><input type="checkbox" checked={form.scheduled} onChange={(event) => update("scheduled", event.target.checked)} /><span>Add this item to the cash-flow calendar</span></label>
         {form.scheduled && <><div className="field-grid"><Field label="Frequency"><Select value={form.frequency} onChange={(event) => update("frequency", event.target.value)}><option value="weekly">Weekly</option><option value="biweekly">Bi-weekly</option><option value="monthly">Monthly</option><option value="yearly">Yearly</option></Select></Field><Field label="First date"><Input type="date" value={form.nextDate} onChange={(event) => update("nextDate", event.target.value)} /></Field></div><Field label="Paid with"><Select value={form.paymentMethod} onChange={(event) => update("paymentMethod", event.target.value)}><option value="bank">Bank / debit</option><option value="cash">Cash</option><option value="credit">Credit card</option></Select></Field><label className="check-row"><input type="checkbox" checked={form.autoPost} onChange={(event) => update("autoPost", event.target.checked)} /><span>Automatically post this expense when due</span></label></>}
         <Button kind="primary" disabled={number(form.amount) <= 0} onClick={save}><Icon name="save" />Save detail</Button>

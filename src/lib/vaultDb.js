@@ -13,6 +13,42 @@ const WRAP_AAD = new TextEncoder().encode("lakshmi-master-key-wrap-v2");
 const QUICK_AAD = new TextEncoder().encode("lakshmi-quick-unlock-wrap-v1");
 const LAST_PROFILE_KEY = "lakshmi-last-profile";
 
+export function postRingFencedForeignMonth(input, { date = todayISO() } = {}) {
+  const vault = normalizeVault(structuredClone(input), input?.profile?.name);
+  const settings = vault.planning.crossBorder;
+  if (!settings.enabled) throw new Error("Enable the cross-border isolator before recording a foreign month.");
+  const rate = Math.max(0, number(settings.cadPerForeignUnit));
+  if (!rate) throw new Error("Add a valid CAD-per-INR planning rate first.");
+  const accountId = "india-ring-fence";
+  const month = String(date).slice(0, 7);
+  const batchId = `cross-border-${month}`;
+  if (vault.foreignTransactions.some((transaction) => transaction.batchId === batchId)) {
+    return { vault, applied: false, balanceForeign: number(vault.foreignAccounts.find((account) => account.id === accountId)?.balance) };
+  }
+  const incomeForeign = Math.max(0, number(settings.monthlyIncomeForeign));
+  const debtCad = Math.max(0, number(settings.monthlyDebtCad));
+  const debtForeign = debtCad / rate;
+  const netForeign = incomeForeign - debtForeign;
+  const existing = vault.foreignAccounts.find((account) => account.id === accountId);
+  const opening = existing ? number(existing.balance) : Math.max(0, number(settings.openingBalanceForeign));
+  const account = {
+    ...(existing || {}),
+    id: accountId,
+    name: "India ring-fenced account",
+    currency: settings.foreignCurrency || "INR",
+    balance: Math.round((opening + netForeign) * 100) / 100,
+    ringFenced: true,
+    updatedAt: new Date().toISOString(),
+  };
+  const transactions = [
+    { id: uid("foreign-income"), batchId, accountId, date, direction: "in", kind: "foreign-income", amountForeign: incomeForeign, homeEquivalent: Math.round(incomeForeign * rate * 100) / 100, currency: account.currency },
+    { id: uid("foreign-debt"), batchId, accountId, date, direction: "out", kind: "foreign-debt", amountForeign: Math.round(debtForeign * 100) / 100, homeEquivalent: debtCad, currency: account.currency },
+  ];
+  vault.foreignAccounts = existing ? vault.foreignAccounts.map((item) => item.id === accountId ? account : item) : [account, ...vault.foreignAccounts];
+  vault.foreignTransactions = [...transactions, ...vault.foreignTransactions];
+  return { vault, applied: true, balanceForeign: account.balance, incomeForeign, debtForeign: Math.round(debtForeign * 100) / 100, netForeign: Math.round(netForeign * 100) / 100 };
+}
+
 function requestResult(request) {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);

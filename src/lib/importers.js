@@ -5,6 +5,49 @@ function parseDate(text) {
   return normalizeDate(text, { fallback: todayISO(), reference: todayISO() });
 }
 
+const LEAK_CATEGORIES = new Set(["Dining", "Subscriptions", "Shopping", "Entertainment"]);
+
+export function detectDiscretionaryLeaks(vault, month = todayISO().slice(0, 7), scope = "household") {
+  const ownerMatches = (record) => {
+    if (!scope || scope === "household") return true;
+    const owner = record?.owner || "me";
+    return scope === "partner" ? owner === "partner" || owner === "spouse" : owner !== "partner" && owner !== "spouse" && owner !== "household";
+  };
+  const candidates = (vault?.expenses || []).filter((expense) => {
+    const amount = number(expense.total);
+    return String(expense.date || "").slice(0, 7) === month
+      && ownerMatches(expense)
+      && !expense.excludeFromSpent
+      && LEAK_CATEGORIES.has(expense.category)
+      && amount > 0
+      && amount < 50;
+  });
+  const cumulativeTotal = candidates.reduce((sum, expense) => sum + number(expense.total), 0);
+  if (cumulativeTotal <= 300) return [];
+
+  const categoryMap = new Map();
+  for (const expense of candidates) {
+    const category = expense.category || "Other";
+    const current = categoryMap.get(category) || { category, count: 0, total: 0, merchants: new Map() };
+    const merchant = String(expense.store || "Unlabelled purchase").trim();
+    current.count += 1;
+    current.total += number(expense.total);
+    current.merchants.set(merchant, (current.merchants.get(merchant) || 0) + 1);
+    categoryMap.set(category, current);
+  }
+  return [...categoryMap.values()]
+    .map((group) => ({
+      category: group.category,
+      count: group.count,
+      total: Math.round(group.total * 100) / 100,
+      average: Math.round((group.total / group.count) * 100) / 100,
+      cumulativeTotal: Math.round(cumulativeTotal * 100) / 100,
+      recurringMerchants: [...group.merchants.entries()].filter(([, count]) => count >= 2).map(([name, count]) => ({ name, count })),
+    }))
+    .filter((group) => group.count >= 2)
+    .sort((a, b) => b.total - a.total);
+}
+
 function amountAfter(text, labels) {
   for (const label of labels) {
     const expression = new RegExp(`${label}[^0-9-]{0,20}\\$?\\s*([0-9][0-9,]*\\.?[0-9]{0,2})`, "i");

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { CATEGORIES } from "../data/defaults.js";
-import { availableHistory, budgetActuals, cardPaymentMonths, chartStartMonth, dueCards, estimatePayroll, expenseRefundStatus, fuelMetrics, jointAccountBalance, localInsights, monthStats, ownerMatches, salaryVersionOnDate, unmatchedStatementTransactions } from "../lib/finance.js";
+import { availableHistory, budgetActuals, buildAIPayload, cardPaymentMonths, chartStartMonth, dueCards, expenseRefundStatus, fuelMetrics, jointAccountBalance, localInsights, monthStats, ownerMatches, unmatchedStatementTransactions } from "../lib/finance.js";
 import { compactMoney, currentMonth, money, monthLabel, number, shiftMonth, todayISO, uid } from "../lib/format.js";
 import { askFinancialAssistant } from "../lib/openai.js";
 import { Button, Card, CardHeader, Icon, IconButton, Input, Field, Modal, MonthNavigator, Segmented, Select } from "../components/ui.jsx";
@@ -220,36 +220,6 @@ function JointAccountModal({ vault, persist, notify, companion, currentOwner, on
   );
 }
 
-function financialSummary(vault, month, scope = "household") {
-  const stats = monthStats(vault, month, scope);
-  const budgets = budgetActuals(vault, month, scope).filter((item) => item.budget || item.actual).slice(0, 12);
-  const cards = dueCards(vault, month, scope).map((item) => ({ name: `${item.card.bank} ${item.card.last4 || item.card.name}`, dueDate: item.dueDate, amount: item.amount, paid: item.paid }));
-  const vehicle = vault.vehicles.find((item) => item.active !== false) || vault.vehicles[0];
-  const fuel = fuelMetrics(vault, vehicle?.id);
-  const monthlyTrend = availableHistory(vault, month, 6, scope).map((item) => ({ month: item.month, income: item.income, spent: item.spent, cardPayments: item.payments }));
-  const payrollEstimates = vault.incomeSources.filter((source) => source.kind === "salary" && ownerMatches(source, scope)).map((source) => {
-    const active = { ...source, ...(salaryVersionOnDate(source, todayISO()) || {}) };
-    const estimate = estimatePayroll({ annualSalary: active.annualSalary, province: active.province || vault.settings.province, frequency: active.frequency, rrspAnnual: active.rrspAnnual, benefitsPerPay: active.benefitsPerPay });
-    return { owner: source.owner || "me", annualGross: estimate.grossAnnual, estimatedIncomeTax: estimate.federal + estimate.provincial, cppQpp: estimate.cpp, eiQpip: estimate.ei + estimate.qpip, estimatedNet: estimate.netAnnual, province: estimate.provinceName };
-  }).filter((item) => item.annualGross > 0);
-  return JSON.stringify({
-    month,
-    income: stats.income,
-    spent: stats.spent,
-    saved: stats.saved,
-    bankBalance: number(vault.settings.bankBalance),
-    savingsBalance: number(vault.settings.savingsBalance),
-    jointAccountBalance: jointAccountBalance(vault),
-    savingsGoals: (vault.savingsGoals || []).map((goal) => ({ name: goal.name, target: number(goal.target), allocated: number(goal.allocated), targetDate: goal.targetDate || null })),
-    payrollEstimates,
-    categories: stats.categories.slice(0, 12).map((item) => ({ name: item.name, amount: Math.round(item.value * 100) / 100, percent: Math.round(item.percent) })),
-    budgets: budgets.map((item) => ({ category: item.category, budget: item.budget, actual: item.actual })),
-    cardBills: cards,
-    monthlyTrend,
-    fuel: vehicle ? { vehicle: `${vehicle.year} ${vehicle.make} ${vehicle.model}`, averageL100km: fuel.average, costPer100km: fuel.costPer100, kmTracked: fuel.kmTracked, bestStation: fuel.bestStation?.name || null } : null,
-  });
-}
-
 function FinancialAssistantModal({ vault, month, scope, persist, notify, onClose }) {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
@@ -271,7 +241,7 @@ function FinancialAssistantModal({ vault, month, scope, persist, notify, onClose
     setBusy(true);
     setError("");
     try {
-      const result = await askFinancialAssistant({ apiKey: vault.ai.apiKey, model: vault.ai.model, question, summary: financialSummary(vault, month, scope) });
+      const result = await askFinancialAssistant({ apiKey: vault.ai.apiKey, model: vault.ai.model, question, payload: buildAIPayload(vault, month, scope) });
       setAnswer(result.answer);
       await persist((current) => ({ ...current, ai: { ...current.ai, usage: [result.usage, ...(current.ai?.usage || [])].slice(0, 500) } }));
     } catch (reason) {

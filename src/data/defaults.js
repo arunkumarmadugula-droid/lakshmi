@@ -1,6 +1,6 @@
 import { normalizeTheme } from "../lib/theme.js";
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 8;
 
 export const REGIONS = {
   CA: { country: "CA", name: "Canada", currency: "CAD", locale: "en-CA" },
@@ -109,6 +109,47 @@ export function createEmptyVault(profileName = "My household", country = "CA") {
     cardPayments: [],
     savingsTransfers: [],
     savingsGoals: [],
+    planning: {
+      crossBorder: {
+        enabled: false,
+        foreignCurrency: "INR",
+        monthlyIncomeForeign: 16000,
+        monthlyDebtCad: 300,
+        cadPerForeignUnit: 0.0165,
+        openingBalanceForeign: 0,
+        ringFenced: true,
+      },
+      relocation: {
+        currentAddress: "55 Creekwood Drive",
+        candidateAddress: "20 Deans Drive",
+        currentShelter: 2140,
+        candidateShelter: 2350,
+        currentFuelBudget: 300,
+        candidateTransitCost: 0,
+        avoidedTrips: 22,
+        roundTripKm: 26,
+        fuelPrice: 1.65,
+        vehicleWearPerKm: 0.12,
+      },
+      scenario: {
+        settings: {
+          savingsRate: 20,
+          annualReturn: 6,
+          inflation: 2.5,
+          horizonYears: 15,
+          discretionaryTrim: 10,
+        },
+        events: {
+          downturn: false,
+          promotion: false,
+          downPayment: false,
+          emergency: false,
+        },
+        savedAt: null,
+      },
+    },
+    foreignAccounts: [],
+    foreignTransactions: [],
     jointAccount: {
       enabled: false,
       name: "Joint account",
@@ -187,6 +228,18 @@ export function normalizeVault(input, profileName) {
     cardPayments: Array.isArray(source.cardPayments) ? source.cardPayments : [],
     savingsTransfers: Array.isArray(source.savingsTransfers) ? source.savingsTransfers : [],
     savingsGoals,
+    planning: {
+      crossBorder: { ...base.planning.crossBorder, ...(source.planning?.crossBorder || {}) },
+      relocation: { ...base.planning.relocation, ...(source.planning?.relocation || {}) },
+      scenario: {
+        ...base.planning.scenario,
+        ...(source.planning?.scenario || {}),
+        settings: { ...base.planning.scenario.settings, ...(source.planning?.scenario?.settings || {}) },
+        events: { ...base.planning.scenario.events, ...(source.planning?.scenario?.events || {}) },
+      },
+    },
+    foreignAccounts: Array.isArray(source.foreignAccounts) ? source.foreignAccounts : [],
+    foreignTransactions: Array.isArray(source.foreignTransactions) ? source.foreignTransactions : [],
     jointAccount: { ...base.jointAccount, ...(source.jointAccount || {}) },
     jointTransfers: Array.isArray(source.jointTransfers) ? source.jointTransfers : [],
     vehicles: Array.isArray(source.vehicles) ? source.vehicles : [],
